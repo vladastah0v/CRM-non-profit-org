@@ -7,7 +7,7 @@ factory-boy>=3.3,<4
 Faker>=33
 ruff>=0.9,<1
 mypy>=1.15,<2
-django-stubs[compatible-mypy]>=5.1,<6
-djangorestframework-stubs>=3.15,<4
+django-stubs[compatible-mypy]>=6.1,<7
+djangorestframework-stubs>=3.18,<4
 types-qrcode
 pre-commit>=4.0,<5
