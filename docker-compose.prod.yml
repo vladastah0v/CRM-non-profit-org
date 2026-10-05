@@ -1,0 +1,43 @@
+# Рабочий сервер: Gunicorn, Nginx с TLS (НФТ-ИБ-01), автопродление сертификата.
+# Порты PostgreSQL и Redis наружу не публикуются (НФТ-ИБ-09).
+
+services:
+  web:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DJANGO_MIGRATE: "1"
+      DJANGO_COLLECTSTATIC: "1"
+
+  celery:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+
+  beat:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+
+  nginx:
+    environment:
+      DOMAIN: ${DOMAIN:?Задайте DOMAIN в .env}
+      ADMIN_URL: ${DJANGO_ADMIN_URL:-admin/}
+    volumes:
+      - ./docker/nginx/prod.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - certbot-www:/var/www/certbot:ro
+      - letsencrypt:/etc/letsencrypt:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    # Перечитывать сертификаты раз в 6 часов, чтобы подхватить продлённые certbot
+    command: ["/bin/sh", "-c", "while :; do sleep 6h; nginx -s reload; done & exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot-www:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
+    restart: unless-stopped
+
+volumes:
+  certbot-www:
+  letsencrypt:

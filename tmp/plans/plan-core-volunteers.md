@@ -46,7 +46,9 @@ CRM НКО/
 1. `git init`, `.gitignore`, `.editorconfig`, `pre-commit` (ruff, mypy).
 2. Django-проект, настройки через переменные окружения (`django-environ`), `.env.example`.
 3. Dockerfile (python:3.12-slim, сборка Tailwind отдельной стадией), docker-compose:
-   web, PostgreSQL 16 (pg_trgm, citext), Redis 7, Celery worker, Celery Beat, Nginx, MinIO (S3 для разработки).
+   web, PostgreSQL 16 (pg_trgm, citext), Redis 7, Celery worker, Celery Beat, Nginx.
+   ~~MinIO~~ — убран (изменение, ждёт подтверждения): файлы шифруются на уровне приложения
+   и выдаются только через Django; в разработке — локальный диск, на сервере — S3 в РФ.
 4. `docker-compose.prod.yml`: Gunicorn, Nginx с TLS/HSTS, без MinIO (S3 в РФ из переменных).
 5. GitHub Actions: ruff → mypy → pytest (с сервисом PostgreSQL) → сборка образа.
 6. Базовый шаблон: меню, навигация, адаптивная сетка от 360 px, русский язык, ДД.ММ.ГГГГ.

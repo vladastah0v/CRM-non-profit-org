@@ -1,0 +1,39 @@
+# Секреты и локальные настройки — никогда не коммитим (НФТ-ИБ-10)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.python-version
+
+# Инструменты
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Django
+/media/
+/staticfiles/
+/static/dist/
+*.sqlite3
+
+# Рабочие файлы
+/tmp/
+*.log
+
+# IDE и ОС
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,21 @@
+# Рабочие зависимости. Только открытые библиотеки (п. 5.6 ТЗ).
+Django>=5.2,<5.3
+django-environ>=0.12,<0.13
+psycopg[binary]>=3.2,<4
+djangorestframework>=3.16,<3.17
+drf-spectacular>=0.28,<1
+drf-spectacular-sidecar>=2025.1
+django-filter>=25.1,<26
+django-htmx>=1.23,<2
+django-unfold>=0.60,<1
+django-simple-history>=3.8,<4
+django-otp>=1.6,<2
+qrcode>=8.0,<9
+argon2-cffi>=23.1,<26
+cryptography>=44,<47
+celery[redis]>=5.5,<6
+redis>=5.2,<7
+phonenumberslite>=8.13,<10
+filetype>=1.2,<2
+gunicorn>=23,<24
+sentry-sdk>=2.20,<3

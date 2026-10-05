@@ -1,0 +1,78 @@
+# Базовая конфигурация (общая для разработки и сервера).
+# Разработка: docker compose up                      (+ docker-compose.override.yml автоматически)
+# Сервер:     docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+x-app: &app
+  build:
+    context: .
+    target: app
+  image: crm-nko:${APP_VERSION:-latest}
+  env_file: .env
+  volumes:
+    - media:/app/media
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-crm}
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Задайте POSTGRES_PASSWORD в .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    <<: *app
+    environment:
+      DJANGO_MIGRATE: "1"
+      DJANGO_COLLECTSTATIC: "1"
+    volumes:
+      - media:/app/media
+      - static:/app/staticfiles
+
+  celery:
+    <<: *app
+    command: ["celery", "-A", "config", "worker", "--loglevel=info", "--concurrency=2"]
+
+  beat:
+    <<: *app
+    command: ["celery", "-A", "config", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - static:/app/staticfiles:ro
+      - ./docker/nginx/snippets:/etc/nginx/snippets:ro
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  media:
+  static:

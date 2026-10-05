@@ -1,0 +1,15 @@
+{% if messages %}
+  <div class="mb-4 space-y-2" role="status" aria-live="polite">
+    {% for message in messages %}
+      <div x-data="dismissible" x-show="visible"
+           class="flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm
+                  {% if message.level_tag == 'error' %}border-red-200 bg-red-50 text-red-800
+                  {% elif message.level_tag == 'warning' %}border-amber-200 bg-amber-50 text-amber-800
+                  {% elif message.level_tag == 'success' %}border-emerald-200 bg-emerald-50 text-emerald-800
+                  {% else %}border-slate-200 bg-white text-slate-800{% endif %}">
+        <span>{{ message }}</span>
+        <button type="button" @click="dismiss" class="text-current opacity-60 hover:opacity-100" aria-label="Закрыть">×</button>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}

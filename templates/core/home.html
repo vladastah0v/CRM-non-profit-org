@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Главная{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6">Добро пожаловать, {{ user.first_name|default:user.username }}</h1>
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <section class="card">
+      <h2 class="mb-2">Система работает</h2>
+      <p class="text-sm text-slate-600">Модули появятся здесь по мере готовности.</p>
+    </section>
+  </div>
+{% endblock %}

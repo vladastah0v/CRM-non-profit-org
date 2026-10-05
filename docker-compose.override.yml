@@ -1,0 +1,55 @@
+# Локальная разработка. Подключается автоматически командой `docker compose up`.
+
+x-dev: &dev
+  build:
+    context: .
+    target: app
+    args:
+      REQUIREMENTS: requirements/dev.txt
+  image: crm-nko:dev
+  volumes:
+    - .:/app
+    - media:/app/media
+
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  web:
+    <<: *dev
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DJANGO_MIGRATE: "1"
+      DJANGO_COLLECTSTATIC: "0"
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  celery:
+    <<: *dev
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+
+  beat:
+    <<: *dev
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+
+  # Пересборка CSS при изменении шаблонов
+  tailwind:
+    build:
+      context: .
+      target: tailwind
+    command: ["tailwindcss", "-i", "static/src/main.css", "-o", "static/dist/main.css", "--watch=always"]
+    volumes:
+      - ./static:/src/static
+      - ./templates:/src/templates
+      - ./apps:/src/apps
+    restart: unless-stopped
+
+  nginx:
+    volumes:
+      - ./docker/nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:8080:80"
