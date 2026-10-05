@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Код подтверждения{% endblock %}
+
+{% block content %}
+  <div class="mx-auto mt-8 max-w-sm">
+    <h1 class="mb-2 text-center">Код подтверждения</h1>
+    <p class="mb-6 text-center text-sm text-slate-600">Откройте приложение-аутентификатор и введите 6 цифр для «CRM НКО».</p>
+    <form method="post" class="card space-y-4" novalidate>
+      {% csrf_token %}
+      {% include "partials/form_errors.html" %}
+      <div>
+        <label for="{{ form.token.id_for_label }}" class="form-label">Код из приложения</label>
+        <input type="text" name="token" id="{{ form.token.id_for_label }}" class="form-input text-center text-lg tracking-widest"
+               inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required autofocus>
+        {% for error in form.token.errors %}<p class="form-error" role="alert">{{ error }}</p>{% endfor %}
+      </div>
+      <button type="submit" class="btn btn-primary w-full">Войти</button>
+    </form>
+    <form method="post" action="{% url 'accounts:logout' %}" class="mt-4 text-center">
+      {% csrf_token %}
+      <button type="submit" class="text-sm text-slate-600 underline hover:text-slate-900">Войти под другим логином</button>
+    </form>
+    <p class="mt-6 text-center text-xs text-slate-500">Потеряли телефон? Обратитесь к администратору — он сбросит двухфакторную аутентификацию.</p>
+  </div>
+{% endblock %}

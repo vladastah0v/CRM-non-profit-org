@@ -1,14 +1,13 @@
-from django.contrib.auth import views as auth_views
 from django.urls import path
+
+from . import views
 
 app_name = "accounts"
 
-# Временный вход по паролю. На этапе «Ядро» заменяется входом с 2FA.
 urlpatterns = [
-    path(
-        "login/",
-        auth_views.LoginView.as_view(template_name="accounts/login.html"),
-        name="login",
-    ),
-    path("logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path("login/", views.LoginView.as_view(), name="login"),
+    path("login/code/", views.otp_verify, name="otp_verify"),
+    path("login/setup-2fa/", views.otp_setup, name="otp_setup"),
+    path("logout/", views.logout_view, name="logout"),
+    path("password/", views.PasswordChangeView.as_view(), name="password_change"),
 ]

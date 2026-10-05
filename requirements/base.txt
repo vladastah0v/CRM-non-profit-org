@@ -17,5 +17,6 @@ celery[redis]>=5.5,<6
 redis>=5.2,<7
 phonenumberslite>=8.13,<10
 filetype>=1.2,<2
+django-storages[s3]>=1.14,<2
 gunicorn>=23,<24
 sentry-sdk>=2.20,<3

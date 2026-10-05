@@ -19,9 +19,9 @@ CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 # Приложения
 # ---------------------------------------------------------------------------
 DJANGO_APPS = [
-    "unfold",
+    "unfold.apps.BasicAppConfig",
     "unfold.contrib.filters",
-    "django.contrib.admin",
+    "apps.core.admin_config.CRMAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -36,10 +36,14 @@ THIRD_PARTY_APPS = [
     "django_filters",
     "django_htmx",
     "simple_history",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
 ]
 LOCAL_APPS = [
     "apps.core",
     "apps.accounts",
+    "apps.audit",
+    "apps.consents",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -50,13 +54,18 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django_htmx.middleware.HtmxMiddleware",
+    "django_otp.middleware.OTPMiddleware",
+    "apps.accounts.middleware.RequireOTPMiddleware",
+    "apps.core.context.CurrentUserMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "django_htmx.middleware.HtmxMiddleware",
     "simple_history.middleware.HistoryRequestMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
+# Сообщения — на сервере, а не в cookie: в них бывает код подключения 2FA
+MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"
 WSGI_APPLICATION = "config.wsgi.application"
 ADMIN_URL = env("DJANGO_ADMIN_URL", default="admin/")
 
@@ -70,6 +79,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "apps.accounts.context_processors.roles",
             ],
         },
     },
@@ -123,6 +133,17 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# Блокировка после неудачных попыток входа (НФТ-ИБ-03)
+LOGIN_MAX_FAILED_ATTEMPTS = 5
+LOGIN_LOCKOUT_MINUTES = 15
+
+# Двухфакторная аутентификация TOTP (НФТ-ИБ-02)
+OTP_TOTP_ISSUER = env("OTP_TOTP_ISSUER", default="CRM НКО")
+OTP_TOTP_THROTTLE_FACTOR = 1
+OTP_ENROLLMENT_TTL_HOURS = 72  # срок действия кода подключения 2FA от администратора
+OTP_PENDING_LOGIN_SECONDS = 5 * 60  # время на ввод кода после пароля
+OTP_ENROLLMENT_LOGIN_SECONDS = 15 * 60  # первое подключение: установить приложение и QR
+
 # Сессия: выход после 30 минут бездействия (НФТ-ИБ-04)
 SESSION_COOKIE_AGE = 30 * 60
 SESSION_SAVE_EVERY_REQUEST = True
@@ -151,10 +172,41 @@ MEDIA_ROOT = env.path("MEDIA_ROOT", default=str(BASE_DIR / "media"))
 FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 25 * 1024 * 1024
 
+ATTACHMENT_MAX_SIZE = 20 * 1024 * 1024  # НФТ-ИБ-11
+ATTACHMENT_LINK_TTL = env.int("ATTACHMENT_LINK_TTL", default=300)  # срок жизни ссылки, сек
+
+# Файлы шифруются приложением и выдаются только через него, поэтому хранилищу
+# достаточно быть приватным: локальный диск в разработке, S3 в РФ на сервере.
+S3_BUCKET = env("S3_BUCKET", default="")
+if S3_BUCKET:
+    ATTACHMENTS_STORAGE = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "bucket_name": S3_BUCKET,
+            "endpoint_url": env("S3_ENDPOINT_URL"),
+            "region_name": env("S3_REGION", default="ru-central1"),
+            "access_key": env("S3_ACCESS_KEY"),
+            "secret_key": env("S3_SECRET_KEY"),
+            "default_acl": "private",
+            "querystring_auth": True,
+            "file_overwrite": False,
+        },
+    }
+else:
+    ATTACHMENTS_STORAGE = {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "OPTIONS": {"location": str(MEDIA_ROOT), "base_url": None},
+    }
+
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "attachments": ATTACHMENTS_STORAGE,
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
+
+# Ключи шифрования чувствительных полей и файлов — вне базы (НФТ-ИБ-05).
+# Формат: «id:ключ,id:ключ»; первый — текущий. Сгенерировать: manage.py generate_encryption_key
+FIELD_ENCRYPTION_KEYS = env("FIELD_ENCRYPTION_KEYS")
 
 # ---------------------------------------------------------------------------
 # Безопасность (общая часть; HTTPS-настройки — в prod.py)
@@ -165,6 +217,8 @@ SECURE_REFERRER_POLICY = "same-origin"
 SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
 CSRF_COOKIE_HTTPONLY = False  # HTMX читает токен из шаблона, не из cookie
 CSRF_FAILURE_VIEW = "apps.core.views.csrf_failure"
+# Брать IP клиента из X-Real-IP (его ставит Nginx). Включать только за доверенным прокси.
+TRUST_X_REAL_IP = env.bool("TRUST_X_REAL_IP", default=False)
 
 # ---------------------------------------------------------------------------
 # API (п. 7.5)
@@ -173,7 +227,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_PERMISSION_CLASSES": ["apps.accounts.permissions.IsVerifiedStaff"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
@@ -184,7 +238,8 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "CRM НКО — внутренний API",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
-    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
+    # Документация API — только сотрудникам (п. 7.5)
+    "SERVE_PERMISSIONS": ["apps.accounts.permissions.IsVerifiedStaff"],
     "SCHEMA_PATH_PREFIX": "/api/v1/",
     # Swagger UI из локальной статики, без CDN — совместимо с CSP
     "SWAGGER_UI_DIST": "SIDECAR",
@@ -197,7 +252,7 @@ SPECTACULAR_SETTINGS = {
 UNFOLD = {
     "SITE_TITLE": "CRM НКО — администрирование",
     "SITE_HEADER": "CRM НКО",
-    "SHOW_HISTORY": True,
+    "SHOW_HISTORY": False,  # встроенный журнал админки отключён — см. CRMModelAdmin
     "SHOW_VIEW_ON_SITE": False,
 }
 
@@ -229,10 +284,23 @@ if SENTRY_DSN:
     from sentry_sdk.integrations.celery import CeleryIntegration
     from sentry_sdk.integrations.django import DjangoIntegration
 
+    def _scrub_event(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any]:
+        """Из события уходят только тип ошибки и стек: без тела запроса, cookie и заголовков."""
+        request = event.get("request") or {}
+        for key in ("data", "cookies", "headers", "query_string", "env"):
+            request.pop(key, None)
+        event.pop("user", None)
+        return event
+
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[DjangoIntegration(), CeleryIntegration()],
         send_default_pii=False,
+        # Локальные переменные стека могут содержать ПДн и ключи шифрования
+        include_local_variables=False,
+        include_source_context=False,
+        max_request_body_size="never",
+        before_send=_scrub_event,  # type: ignore[arg-type]
         environment=env("SENTRY_ENVIRONMENT", default="production"),
         traces_sample_rate=0.0,
     )

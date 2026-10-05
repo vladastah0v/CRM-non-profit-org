@@ -19,7 +19,8 @@ server {
     }
 
     location / {
-        return 301 https://$host$request_uri;
+        # Домен из конфигурации, а не из заголовка Host клиента
+        return 301 https://${DOMAIN}$request_uri;
     }
 }
 
@@ -48,8 +49,11 @@ server {
         add_header X-Content-Type-Options "nosniff" always;
     }
 
-    location /accounts/login/ {
-        limit_req zone=login burst=5 nodelay;
+    # Только форма пароля. Страницы ввода кода 2FA — под общим лимитом: иначе сотрудники
+    # за одним NAT фонда упирались бы в лимит при одновременном входе.
+    # Подбор пароля и кода дополнительно ограничен блокировкой в приложении (5 попыток).
+    location = /accounts/login/ {
+        limit_req zone=login burst=10 nodelay;
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         include /etc/nginx/snippets/security-headers.conf;
         include /etc/nginx/snippets/proxy.conf;

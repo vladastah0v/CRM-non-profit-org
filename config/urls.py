@@ -12,6 +12,7 @@ api_v1 = [
 urlpatterns = [
     path("", include("apps.core.urls")),
     path("accounts/", include("apps.accounts.urls")),
+    path("", include("apps.consents.urls")),
     path("api/v1/", include((api_v1, "api-v1"))),
     path(settings.ADMIN_URL, admin.site.urls),
 ]

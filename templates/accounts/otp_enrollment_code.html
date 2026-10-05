@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Подключение защиты входа{% endblock %}
+
+{% block content %}
+  <div class="mx-auto mt-8 max-w-sm">
+    <h1 class="mb-2 text-center">Подключение защиты входа</h1>
+    <p class="mb-6 text-center text-sm text-slate-600">Введите код подключения, который вам лично или по телефону передал администратор. Код вида ABCD-EFGH.</p>
+    <form method="post" class="card space-y-4" novalidate>
+      {% csrf_token %}
+      {% include "partials/form_errors.html" %}
+      <div>
+        <label for="{{ form.enrollment_code.id_for_label }}" class="form-label">{{ form.enrollment_code.label }}</label>
+        <input type="text" name="enrollment_code" id="{{ form.enrollment_code.id_for_label }}"
+               class="form-input text-center font-mono text-lg uppercase tracking-widest"
+               maxlength="20" autocomplete="off" autocapitalize="characters" required autofocus>
+        {% for error in form.enrollment_code.errors %}<p class="form-error" role="alert">{{ error }}</p>{% endfor %}
+      </div>
+      <button type="submit" class="btn btn-primary w-full">Продолжить</button>
+    </form>
+    <form method="post" action="{% url 'accounts:logout' %}" class="mt-4 text-center">
+      {% csrf_token %}
+      <button type="submit" class="text-sm text-slate-600 underline hover:text-slate-900">Выйти</button>
+    </form>
+  </div>
+{% endblock %}

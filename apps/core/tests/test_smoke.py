@@ -19,10 +19,8 @@ def test_home_requires_login(client):
     assert reverse("accounts:login") in response["Location"]
 
 
-def test_home_for_logged_in_user(client, django_user_model):
-    user = django_user_model.objects.create_user(username="ivanova", password="x" * 12)
-    client.force_login(user)
-    response = client.get(reverse("core:home"))
+def test_home_for_verified_user(make_user, verified_client):
+    response = verified_client(make_user("coordinator")).get(reverse("core:home"))
     assert response.status_code == 200
     assert "CRM НКО" in response.content.decode()
 

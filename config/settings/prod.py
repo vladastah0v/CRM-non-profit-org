@@ -7,6 +7,8 @@ DEBUG = False
 # Nginx завершает TLS и передаёт схему в заголовке
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = False
+TRUST_X_REAL_IP = True
+REST_FRAMEWORK["NUM_PROXIES"] = 1  # реальный IP для ограничения частоты запросов API
 SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=True)
 SECURE_REDIRECT_EXEMPT = [r"^healthz/$"]
 SECURE_HSTS_SECONDS = env.int("DJANGO_HSTS_SECONDS", default=31_536_000)

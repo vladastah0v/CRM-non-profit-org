@@ -16,7 +16,7 @@
   <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:p-2">Перейти к содержимому</a>
 
   {% block header %}
-    {% if user.is_authenticated %}{% include "partials/header.html" %}{% endif %}
+    {% if user.is_authenticated and user.is_verified %}{% include "partials/header.html" %}{% endif %}
   {% endblock %}
 
   <main id="main" class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">

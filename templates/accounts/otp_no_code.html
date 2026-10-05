@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Нужен код подключения{% endblock %}
+
+{% block content %}
+  <div class="mx-auto mt-12 max-w-md text-center">
+    <h1>Нужен код подключения</h1>
+    <p class="mt-3 text-slate-600">Вход в систему защищён кодом из телефона. Чтобы подключить телефон, попросите у администратора фонда <strong>код подключения</strong> — он передаётся лично или по телефону и действует 3 дня.</p>
+    <form method="post" action="{% url 'accounts:logout' %}" class="mt-6">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-secondary">Выйти</button>
+    </form>
+  </div>
+{% endblock %}

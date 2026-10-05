@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Настройка двухфакторной аутентификации{% endblock %}
+
+{% block content %}
+  <div class="mx-auto mt-4 max-w-md">
+    <h1 class="mb-2">Защита входа</h1>
+    <p class="mb-6 text-sm text-slate-600">Для работы с персональными данными вход подтверждается кодом из телефона. Настройка занимает минуту и делается один раз.</p>
+
+    <ol class="card space-y-5">
+      <li>
+        <h2 class="text-base">1. Установите приложение</h2>
+        <p class="mt-1 text-sm text-slate-600">Яндекс Ключ, Google Authenticator, FreeOTP или любое другое с поддержкой TOTP.</p>
+      </li>
+      <li>
+        <h2 class="text-base">2. Отсканируйте QR-код</h2>
+        <img src="{{ qr_data_uri }}" alt="QR-код для приложения-аутентификатора" width="200" height="200"
+             class="mx-auto my-3 h-48 w-48 rounded bg-white p-2">
+        <p class="text-sm text-slate-600">Не сканируется? Введите ключ вручную:</p>
+        <p class="mt-1 break-all rounded bg-slate-100 px-3 py-2 font-mono text-sm">{{ secret }}</p>
+      </li>
+      <li>
+        <h2 class="text-base">3. Введите код из приложения</h2>
+        <form method="post" class="mt-2 space-y-3" novalidate>
+          {% csrf_token %}
+          {% include "partials/form_errors.html" %}
+          <label for="{{ form.token.id_for_label }}" class="sr-only">Код из приложения</label>
+          <input type="text" name="token" id="{{ form.token.id_for_label }}" class="form-input text-center text-lg tracking-widest"
+                 inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required>
+          {% for error in form.token.errors %}<p class="form-error" role="alert">{{ error }}</p>{% endfor %}
+          <button type="submit" class="btn btn-primary w-full">Подтвердить и войти</button>
+        </form>
+      </li>
+    </ol>
+  </div>
+{% endblock %}

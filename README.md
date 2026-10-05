@@ -33,7 +33,8 @@ Django Admin + Unfold · Nginx + Gunicorn · Docker Compose · GitHub Actions.
 ```bash
 cp .env.example .env
 # В .env: задайте DJANGO_SECRET_KEY, POSTGRES_PASSWORD и тот же пароль в DATABASE_URL,
-# DJANGO_SETTINGS_MODULE=config.settings.dev
+# DJANGO_SETTINGS_MODULE=config.settings.dev и FIELD_ENCRYPTION_KEYS (команда ниже)
+docker compose run --rm --no-deps web python manage.py generate_encryption_key
 docker compose up --build
 ```
 
@@ -48,7 +49,17 @@ docker compose up --build
 
 ```bash
 docker compose exec web python manage.py createsuperuser
+docker compose exec web python manage.py issue_2fa_code <логин>   # код подключения 2FA
 ```
+
+Вход — пароль и код из приложения-аутентификатора (Яндекс Ключ, Google Authenticator и т. п.).
+Подключить телефон можно только с одноразовым **кодом подключения** от администратора:
+одного пароля для этого недостаточно. Остальных сотрудников администратор заводит
+в админ-панели, выдаёт роли и действием «Выдать код подключения 2FA» — код, который
+передаёт лично или по телефону. То же действие — если сотрудник потерял телефон.
+
+> **Ключ шифрования** (`FIELD_ENCRYPTION_KEYS`) храните отдельно от резервных копий базы.
+> Без ключа зашифрованные данные и файлы восстановить нельзя.
 
 ## Команды разработчика
 
