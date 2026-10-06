@@ -45,9 +45,10 @@ exclude = ["migrations/", "tmp/"]
 django_settings_module = "config.settings.test"
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py"]
-addopts = "-ra --strict-markers"
+# --ds, а не DJANGO_SETTINGS_MODULE: у pytest-django переменная окружения важнее ini-файла,
+# и в контейнере разработки тесты запускались бы с dev-настройками (Redis, media, Argon2)
+addopts = "-ra --strict-markers --ds=config.settings.test"
 filterwarnings = ["ignore::DeprecationWarning:celery.*"]
 
 [tool.coverage.run]

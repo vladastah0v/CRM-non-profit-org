@@ -71,7 +71,25 @@ docker compose exec web mypy .
 docker compose exec web python manage.py makemigrations
 ```
 
-CSS собирается автоматически сервисом `tailwind` при изменении шаблонов.
+Тесты всегда запускаются с настройками `config.settings.test` (флаг `--ds` в `pyproject.toml`).
+
+CSS собирается сервисом `tailwind` при изменении шаблонов. На Windows Docker Desktop
+не передаёт контейнеру события об изменении файлов — тогда пересоберите CSS вручную:
+
+```bash
+docker compose exec tailwind tailwindcss -i static/src/main.css -o static/dist/main.css
+```
+
+## Модули
+
+| Модуль | Адрес | Кто работает |
+|---|---|---|
+| Волонтёры (ФТ-В-01…08) | `/volunteers/` | координатор, администратор; куратор — только чтение контактов |
+| Уведомления (ФТ-У-02) | `/notifications/`, колокольчик в шапке | все сотрудники |
+| Приём анкет с сайта (п. 7.1) | `POST /api/v1/intake/volunteer/` | сайт фонда, подпись HMAC — [docs/intake-api.md](docs/intake-api.md) |
+
+Перед работой администратор заполняет справочники: навыки, районы, программы,
+типы обучения, причины выбытия, источники прихода.
 
 ## Структура
 

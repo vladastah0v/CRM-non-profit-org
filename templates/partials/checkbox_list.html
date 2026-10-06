@@ -1,0 +1,17 @@
+{# Список флажков (навыки, программы): {% include "partials/checkbox_list.html" with field=form.skills %} #}
+<fieldset>
+  <legend class="form-label">{{ field.label }}</legend>
+  {% if field.field.queryset is not None and not field.field.queryset.exists %}
+    <p class="text-sm text-slate-500">Справочник пуст — его заполняет администратор.</p>
+  {% else %}
+    <div class="grid max-h-56 gap-1 overflow-y-auto rounded-md border border-slate-200 p-2 sm:grid-cols-2">
+      {% for checkbox in field %}
+        <label for="{{ checkbox.id_for_label }}" class="flex items-center gap-2 rounded px-1 py-1 text-sm text-slate-700 hover:bg-slate-50">
+          {{ checkbox.tag }}
+          <span>{{ checkbox.choice_label }}</span>
+        </label>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% for error in field.errors %}<p class="form-error" role="alert">{{ error }}</p>{% endfor %}
+</fieldset>

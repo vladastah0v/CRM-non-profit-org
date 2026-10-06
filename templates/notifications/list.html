@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Уведомления{% endblock %}
+
+{% block content %}
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1>Уведомления</h1>
+    {% if unread_notifications %}
+      <form method="post" action="{% url 'notifications:read_all' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary">Отметить все прочитанными</button>
+      </form>
+    {% endif %}
+  </div>
+
+  {% if page.object_list %}
+    <ul class="max-w-3xl divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
+      {% for n in page.object_list %}
+        <li class="flex items-start justify-between gap-3 px-4 py-3 {% if not n.read_at %}bg-brand-50{% endif %}">
+          <div>
+            <p class="font-medium">{% if not n.read_at %}<span class="sr-only">Новое: </span>{% endif %}{{ n.title }}</p>
+            {% if n.body %}<p class="text-sm text-slate-600">{{ n.body }}</p>{% endif %}
+            <p class="text-xs text-slate-500">{{ n.created_at|date:"d.m.Y H:i" }}</p>
+          </div>
+          {% if n.url %}
+            <form method="post" action="{% url 'notifications:open' n.pk %}" class="shrink-0">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-secondary">Открыть</button>
+            </form>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+    {% if page.has_other_pages %}
+      <nav class="mt-4 flex max-w-3xl items-center justify-between text-sm" aria-label="Страницы">
+        {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}" class="btn btn-secondary">← Новее</a>{% else %}<span></span>{% endif %}
+        <span class="text-slate-600">Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
+        {% if page.has_next %}<a href="?page={{ page.next_page_number }}" class="btn btn-secondary">Старее →</a>{% else %}<span></span>{% endif %}
+      </nav>
+    {% endif %}
+  {% else %}
+    <p class="card max-w-3xl text-slate-600">Уведомлений нет.</p>
+  {% endif %}
+{% endblock %}

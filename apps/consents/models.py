@@ -1,6 +1,12 @@
+import datetime
+import uuid
 from typing import Any, Self
 
+from django.apps import apps
 from django.db import models
+from django.db.models import Exists, OuterRef, Q
+from django.utils import timezone
+from simple_history.models import HistoricalRecords
 
 from apps.accounts.roles import RoleCode, user_has_role
 from apps.core.fields import EncryptedTextField
@@ -9,15 +15,24 @@ from apps.core.models import ArchivableQuerySet, BaseModel
 
 class AttachmentQuerySet(ArchivableQuerySet):
     def visible_to(self, user: Any) -> Self:
-        """Администратор видит все файлы, остальные — загруженные ими.
+        """Администратор видит все файлы, остальные — загруженные ими и файлы карточек,
+        к которым у них есть доступ: координатор — сканы согласий и фото волонтёров.
 
-        Доступ через карточки (волонтёр, подопечный) добавляется вместе с модулями.
+        Доступ через карточки подопечных добавляется вместе с модулем «Подопечные».
         """
         if user_has_role(user, RoleCode.ADMIN):
             return self.all()
         if not getattr(user, "is_authenticated", False):
             return self.none()
-        return self.filter(created_by=user)
+        condition = Q(created_by=user)
+        if user_has_role(user, RoleCode.COORDINATOR):
+            volunteer = apps.get_model("volunteers", "Volunteer")
+            volunteer_consents = Consent.objects.filter(
+                scan=OuterRef("pk"), volunteer__isnull=False
+            )
+            volunteer_photos = volunteer.objects.filter(photo=OuterRef("pk"))
+            condition |= Q(Exists(volunteer_consents)) | Q(Exists(volunteer_photos))
+        return self.filter(condition)
 
 
 class Attachment(BaseModel):
@@ -42,3 +57,145 @@ class Attachment(BaseModel):
 
     def __str__(self) -> str:
         return f"Файл {self.content_type}, {self.size} байт"
+
+
+# ---------------------------------------------------------------------------
+# Согласия на обработку персональных данных (ФТ-Д-01)
+# ---------------------------------------------------------------------------
+class ConsentKind(models.TextChoices):
+    """Виды согласия заданы законом (152-ФЗ), поэтому это перечисление, а не справочник."""
+
+    GENERAL = "general", "На обработку персональных данных"
+    SPECIAL = "special", "На обработку особых категорий данных"
+    PHOTO_VIDEO = "photo_video", "На фото- и видеосъёмку"
+
+
+class ConsentSigner(models.TextChoices):
+    SUBJECT = "subject", "Сам человек"
+    REPRESENTATIVE = "representative", "Законный представитель"
+
+
+class ConsentChannel(models.TextChoices):
+    PAPER = "paper", "Бумажный бланк"
+    WEBSITE = "website", "Отметка в форме на сайте"
+
+
+class ConsentQuerySet(ArchivableQuerySet):
+    def visible_to(self, user: Any) -> Self:
+        """Матрица 2.2: администратор — все, координатор — согласия волонтёров.
+
+        Куратор (согласия своих подопечных) — с модулем «Подопечные».
+        """
+        if user_has_role(user, RoleCode.ADMIN):
+            return self.all()
+        if user_has_role(user, RoleCode.COORDINATOR):
+            return self.filter(volunteer__isnull=False)
+        return self.none()
+
+    def valid_on(self, day: datetime.date | None = None) -> Self:
+        """Действующие на дату: подписаны, не истекли, не отозваны, не в архиве."""
+        day = day or timezone.localdate()
+        return self.filter(
+            Q(valid_until__isnull=True) | Q(valid_until__gte=day),
+            Q(revoked_on__isnull=True) | Q(revoked_on__gt=day),
+            signed_on__lte=day,
+            is_archived=False,
+        )
+
+
+class Consent(BaseModel):
+    """Согласие волонтёра или подопечного. Связь с карточкой — отдельными внешними ключами
+    (п. 4.2 ТЗ); ключ на подопечного появится вместе с модулем «Подопечные»."""
+
+    volunteer = models.ForeignKey(
+        "volunteers.Volunteer",
+        verbose_name="волонтёр",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="consents",
+    )
+    kind = models.CharField("вид согласия", max_length=20, choices=ConsentKind.choices)
+    signed_on = models.DateField("дата подписания")
+    signer = models.CharField(
+        "кто подписал", max_length=20, choices=ConsentSigner.choices, default=ConsentSigner.SUBJECT
+    )
+    signer_name = models.CharField(
+        "ФИО подписавшего",
+        max_length=300,
+        blank=True,
+        help_text="Обязательно, если согласие подписал законный представитель.",
+    )
+    valid_until = models.DateField(
+        "действует до", null=True, blank=True, help_text="Пусто — бессрочно до отзыва."
+    )
+    channel = models.CharField(
+        "как получено", max_length=20, choices=ConsentChannel.choices, default=ConsentChannel.PAPER
+    )
+    scan = models.ForeignKey(
+        Attachment,
+        verbose_name="скан",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="consents",
+    )
+    revoked_on = models.DateField("дата отзыва", null=True, blank=True)
+    revocation_note = models.CharField("комментарий к отзыву", max_length=500, blank=True)
+
+    history = HistoricalRecords(
+        history_id_field=models.UUIDField(default=uuid.uuid4),
+        verbose_name="история согласия",
+    )
+    objects = ConsentQuerySet.as_manager()  # type: ignore[misc]
+
+    class Meta:
+        verbose_name = "согласие"
+        verbose_name_plural = "согласия"
+        ordering = ["-signed_on", "-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(volunteer__isnull=False),
+                name="consent_has_subject",
+                violation_error_message="Согласие должно относиться к карточке.",
+            ),
+            models.CheckConstraint(
+                condition=Q(valid_until__isnull=True) | Q(valid_until__gte=models.F("signed_on")),
+                name="consent_valid_after_signed",
+                violation_error_message="Срок действия заканчивается раньше даты подписания.",
+            ),
+            models.CheckConstraint(
+                condition=Q(revoked_on__isnull=True) | Q(revoked_on__gte=models.F("signed_on")),
+                name="consent_revoked_after_signed",
+                violation_error_message="Дата отзыва раньше даты подписания.",
+            ),
+            models.CheckConstraint(
+                condition=~Q(signer=ConsentSigner.REPRESENTATIVE) | ~Q(signer_name=""),
+                name="consent_representative_named",
+                violation_error_message="Укажите ФИО законного представителя.",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()} от {self.signed_on:%d.%m.%Y}"
+
+    def is_valid_on(self, day: datetime.date | None = None) -> bool:
+        day = day or timezone.localdate()
+        return (
+            not self.is_archived
+            and self.signed_on <= day
+            and (self.valid_until is None or self.valid_until >= day)
+            and (self.revoked_on is None or self.revoked_on > day)
+        )
+
+    @property
+    def state(self) -> str:
+        """Состояние для показа в карточке."""
+        today = timezone.localdate()
+        if self.revoked_on is not None and self.revoked_on <= today:
+            return "отозвано"
+        if self.valid_until is not None and self.valid_until < today:
+            return "истёк срок"
+        if self.signed_on > today:
+            return "ещё не вступило"
+        return "действует"

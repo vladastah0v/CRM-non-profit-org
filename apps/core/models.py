@@ -180,3 +180,38 @@ class TrainingType(ReferenceModel):
     class Meta(ReferenceModel.Meta):
         verbose_name = "тип обучения"
         verbose_name_plural = "типы обучения"
+
+
+class VolunteerSource(ReferenceModel):
+    """Источник прихода волонтёра (ФТ-В-01): сайт, знакомые, мероприятие и т. п."""
+
+    class Meta(ReferenceModel.Meta):
+        verbose_name = "источник прихода волонтёра"
+        verbose_name_plural = "источники прихода волонтёров"
+
+
+# ---------------------------------------------------------------------------
+# Сохранённые фильтры списков (п. 3.10): не теряются после выхода из системы
+# ---------------------------------------------------------------------------
+class SavedListFilter(BaseModel):
+    """Последние фильтры и сортировка списка у пользователя.
+
+    Хранятся только структурные фильтры (статус, навыки, район…). Текст поиска не
+    сохраняется: в нём бывают ФИО и телефоны, а это лишняя копия персональных данных.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_list_filters"
+    )
+    list_key = models.CharField("список", max_length=50)
+    query = models.CharField("параметры", max_length=2000, blank=True)
+
+    class Meta:
+        verbose_name = "сохранённый фильтр"
+        verbose_name_plural = "сохранённые фильтры"
+        constraints = [
+            models.UniqueConstraint(fields=["user", "list_key"], name="saved_filter_unique"),
+        ]
+
+    def __str__(self) -> str:
+        return self.list_key

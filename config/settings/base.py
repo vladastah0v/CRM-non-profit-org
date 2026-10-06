@@ -44,6 +44,8 @@ LOCAL_APPS = [
     "apps.accounts",
     "apps.audit",
     "apps.consents",
+    "apps.notifications",
+    "apps.volunteers",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -80,6 +82,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "apps.accounts.context_processors.roles",
+                "apps.notifications.context_processors.notifications",
             ],
         },
     },
@@ -234,6 +237,11 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
     "DEFAULT_THROTTLE_RATES": {"intake": "10/min"},
 }
+# Приём анкет с сайта (п. 7.1): общий с сайтом секрет подписи HMAC-SHA256.
+# Пусто — приём анкет выключен.
+# Сгенерировать: python -c "import secrets; print(secrets.token_hex(32))"
+INTAKE_HMAC_SECRET = env("INTAKE_HMAC_SECRET", default="")
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "CRM НКО — внутренний API",
     "VERSION": "1.0.0",

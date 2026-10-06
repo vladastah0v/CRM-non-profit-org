@@ -10,6 +10,7 @@ os.environ["FIELD_ENCRYPTION_KEYS"] = (
     "test0:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
 )
 os.environ["S3_BUCKET"] = ""
+os.environ["INTAKE_HMAC_SECRET"] = "test-intake-secret"  # noqa: S105 — только для тестов
 
 from .base import *
 

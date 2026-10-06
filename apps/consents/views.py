@@ -15,7 +15,7 @@ from apps.audit.models import AuditAction
 from apps.audit.services import log_event
 from apps.core.crypto import DecryptionError
 
-from .files import parse_download_token, read_attachment
+from .files import PHOTO_TYPES, parse_download_token, read_attachment
 from .models import Attachment
 
 logger = logging.getLogger(__name__)
@@ -63,11 +63,13 @@ def download(request: HttpRequest, token: str) -> HttpResponse:
             extra={"failed": True},
         )
         return render(request, "errors/file_unavailable.html", status=500)
-    log_event(AuditAction.FILE_DOWNLOAD, request=request, obj=attachment)
+    inline = payload.get("i") == "1" and attachment.content_type in PHOTO_TYPES
+    log_event(AuditAction.FILE_DOWNLOAD, request=request, obj=attachment, extra={"inline": inline})
 
     response = HttpResponse(data, content_type=attachment.content_type)
     filename = quote(attachment.original_name)
-    response["Content-Disposition"] = f"attachment; filename*=UTF-8''{filename}"
+    disposition = "inline" if inline else "attachment"
+    response["Content-Disposition"] = f"{disposition}; filename*=UTF-8''{filename}"
     response["Cache-Control"] = "no-store, private"
     response["Content-Security-Policy"] = "default-src 'none'; sandbox"
     return response

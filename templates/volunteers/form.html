@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% load crm %}
+
+{% block title %}{% if v %}Изменение: {{ v.full_name }}{% else %}Новый волонтёр{% endif %}{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация">
+    {% if v %}<a href="{% url 'volunteers:detail' v.pk %}">← К карточке</a>{% else %}<a href="{% url 'volunteers:list' %}">← Все волонтёры</a>{% endif %}
+  </nav>
+  <h1 class="mb-6">{% if v %}Изменение карточки{% else %}Новый волонтёр{% endif %}</h1>
+
+  <form method="post" enctype="multipart/form-data" class="max-w-3xl space-y-4" novalidate>
+    {% csrf_token %}
+    {% include "partials/form_errors.html" %}
+
+    {% if duplicates %}
+      <section class="rounded-lg border border-red-200 bg-red-50 p-4" aria-labelledby="dup-title" role="alert">
+        <h2 id="dup-title" class="text-base text-red-900">Похожие карточки ({{ duplicates|length }})</h2>
+        <ul class="mt-2 space-y-1 text-sm text-red-900">
+          {% for m in duplicates %}
+            <li>
+              <a href="{% url 'volunteers:detail' m.volunteer.pk %}" target="_blank" rel="noopener" class="font-medium underline">{{ m.volunteer.full_name }}</a>,
+              {{ m.volunteer.birth_date|date:"d.m.Y" }}, {{ m.volunteer.get_status_display|lower }}{% if m.volunteer.is_archived %}, в архиве{% endif %}
+              — совпадает: {{ m.reasons|join:", " }}
+            </li>
+          {% endfor %}
+        </ul>
+        <div class="mt-3">{% include "partials/checkbox.html" with field=form.confirm_duplicates %}</div>
+      </section>
+    {% endif %}
+
+    <fieldset class="card space-y-4">
+      <legend class="sr-only">ФИО и дата рождения</legend>
+      <h2>Основное</h2>
+      <div class="grid gap-4 sm:grid-cols-3">
+        {% include "partials/field.html" with field=form.last_name %}
+        {% include "partials/field.html" with field=form.first_name %}
+        {% include "partials/field.html" with field=form.middle_name %}
+      </div>
+      <div class="grid gap-4 sm:grid-cols-3">
+        {% include "partials/field.html" with field=form.birth_date %}
+        {% include "partials/field.html" with field=form.source %}
+      </div>
+    </fieldset>
+
+    <fieldset class="card space-y-4">
+      <legend class="sr-only">Контакты</legend>
+      <h2>Контакты</h2>
+      <div class="grid gap-4 sm:grid-cols-3">
+        {% include "partials/field.html" with field=form.phone %}
+        {% include "partials/field.html" with field=form.email %}
+        {% include "partials/field.html" with field=form.telegram_username %}
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        {% include "partials/field.html" with field=form.city %}
+        {% include "partials/field.html" with field=form.district %}
+      </div>
+    </fieldset>
+
+    <fieldset class="card space-y-4">
+      <legend class="sr-only">Навыки и программы</legend>
+      <h2>Навыки и программы</h2>
+      <div class="grid gap-4 sm:grid-cols-2">
+        {% include "partials/checkbox_list.html" with field=form.skills %}
+        {% include "partials/checkbox_list.html" with field=form.programs %}
+      </div>
+    </fieldset>
+
+    <fieldset class="card space-y-3">
+      <legend class="sr-only">Доступность</legend>
+      <h2>Доступность</h2>
+      <p class="form-help">Дни и часы, когда волонтёр может помогать. Пустые строки не сохраняются; чтобы добавить больше строк, сохраните форму.</p>
+      {{ formset.management_form }}
+      {% for error in formset.non_form_errors %}<p class="form-error" role="alert">{{ error }}</p>{% endfor %}
+      {% for slot in formset %}
+        <div class="grid grid-cols-[minmax(0,1fr)_6.5rem_6.5rem] items-end gap-2">
+          <div>
+            <label for="{{ slot.weekday.id_for_label }}" class="{% if not forloop.first %}sr-only{% else %}form-label{% endif %}">День</label>
+            {{ slot.weekday }}
+          </div>
+          <div>
+            <label for="{{ slot.time_from.id_for_label }}" class="{% if not forloop.first %}sr-only{% else %}form-label{% endif %}">с</label>
+            {{ slot.time_from }}
+          </div>
+          <div>
+            <label for="{{ slot.time_to.id_for_label }}" class="{% if not forloop.first %}sr-only{% else %}form-label{% endif %}">до</label>
+            {{ slot.time_to }}
+          </div>
+        </div>
+        {% for error in slot.non_field_errors %}<p class="form-error" role="alert">{{ error }}</p>{% endfor %}
+      {% endfor %}
+    </fieldset>
+
+    <details class="card" {% if v.guardian_name or form.guardian_name.errors or form.guardian_phone.errors %}open{% endif %}>
+      <summary class="cursor-pointer text-lg font-semibold">Законный представитель <span class="text-sm font-normal text-slate-500">— обязательно, если волонтёру нет 18 лет</span></summary>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        {% include "partials/field.html" with field=form.guardian_name %}
+        {% include "partials/field.html" with field=form.guardian_relation %}
+        {% include "partials/field.html" with field=form.guardian_phone %}
+        {% include "partials/field.html" with field=form.guardian_email %}
+      </div>
+    </details>
+
+    <fieldset class="card space-y-3">
+      <legend class="sr-only">Фото</legend>
+      <h2>Фото</h2>
+      {% include "partials/field.html" with field=form.photo_upload %}
+      {% if v and v.photo_id %}{% include "partials/checkbox.html" with field=form.remove_photo %}{% endif %}
+    </fieldset>
+
+    <div class="flex flex-wrap gap-3">
+      <button type="submit" class="btn btn-primary">Сохранить</button>
+      <a href="{% if v %}{% url 'volunteers:detail' v.pk %}{% else %}{% url 'volunteers:list' %}{% endif %}" class="btn btn-secondary">Отмена</a>
+    </div>
+  </form>
+{% endblock %}

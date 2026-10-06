@@ -35,6 +35,8 @@ ALLOWED_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
 }
+# Фото, которые браузеры показывают на странице (HEIC — только для сканов)
+PHOTO_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 LINK_SALT = "consents.attachment-link"
 
 
@@ -47,8 +49,9 @@ def _aad(attachment_id: uuid.UUID) -> bytes:
     return b"crm-file:" + str(attachment_id).encode()
 
 
-def validate_upload(upload: UploadedFile) -> str:
-    """Проверить файл и вернуть его MIME-тип."""
+def validate_upload(upload: UploadedFile, allowed: frozenset[str] | None = None) -> str:
+    """Проверить файл и вернуть его MIME-тип. `allowed` сужает список допустимых типов."""
+    allowed_types = {t: ALLOWED_TYPES[t] for t in (allowed or ALLOWED_TYPES)}
     max_size = settings.ATTACHMENT_MAX_SIZE
     if upload.size is None or upload.size > max_size:
         raise ValidationError(
@@ -60,14 +63,14 @@ def validate_upload(upload: UploadedFile) -> str:
     head = upload.read(8192)
     upload.seek(0)
     kind = filetype.guess(head)
-    if kind is None or kind.mime not in ALLOWED_TYPES:
-        allowed = ", ".join(sorted(set(ALLOWED_TYPES.values())))
-        raise ValidationError(f"Недопустимый тип файла. Разрешены: {allowed}.")
+    if kind is None or kind.mime not in allowed_types:
+        names = ", ".join(sorted(set(allowed_types.values())))
+        raise ValidationError(f"Недопустимый тип файла. Разрешены: {names}.")
     return kind.mime
 
 
-def store_attachment(upload: UploadedFile) -> Attachment:
-    content_type = validate_upload(upload)
+def store_attachment(upload: UploadedFile, allowed: frozenset[str] | None = None) -> Attachment:
+    content_type = validate_upload(upload, allowed)
     data = upload.read()
     attachment = Attachment(
         id=uuid.uuid4(),
@@ -124,9 +127,16 @@ def reencrypt_attachment(attachment: Attachment) -> bool:
     return True
 
 
-def make_download_url(attachment: Attachment, user: Any) -> str:
-    """Ссылка действует ATTACHMENT_LINK_TTL секунд и только для этого пользователя."""
-    token = signing.dumps({"a": str(attachment.id), "u": str(user.pk)}, salt=LINK_SALT)
+def make_download_url(attachment: Attachment, user: Any, *, inline: bool = False) -> str:
+    """Ссылка действует ATTACHMENT_LINK_TTL секунд и только для этого пользователя.
+
+    `inline` — показать изображение на странице (фото в карточке), а не скачать файл.
+    Для других типов игнорируется: PDF и документы всегда отдаются на скачивание.
+    """
+    payload = {"a": str(attachment.id), "u": str(user.pk)}
+    if inline and attachment.content_type in PHOTO_TYPES:
+        payload["i"] = "1"
+    token = signing.dumps(payload, salt=LINK_SALT)
     return reverse("consents:download", kwargs={"token": token})
 
 
