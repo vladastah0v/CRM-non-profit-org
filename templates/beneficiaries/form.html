@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load crm %}
+
+{% block title %}{% if b %}Изменение: {{ b.full_name }}{% else %}Новый подопечный{% endif %}{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация">
+    {% if b %}<a href="{% url 'beneficiaries:detail' b.pk %}">← К карточке</a>{% else %}<a href="{% url 'beneficiaries:list' %}">← Все подопечные</a>{% endif %}
+  </nav>
+  <h1 class="mb-6">{% if b %}Изменение карточки{% else %}Новый подопечный{% endif %}</h1>
+
+  <form method="post" class="max-w-3xl space-y-4" novalidate>
+    {% csrf_token %}
+    {% include "partials/form_errors.html" %}
+
+    {% if duplicates %}
+      <section class="rounded-lg border border-red-200 bg-red-50 p-4" aria-labelledby="dup-title" role="alert">
+        <h2 id="dup-title" class="text-base text-red-900">Похожие карточки ({{ duplicates|length }})</h2>
+        <ul class="mt-2 space-y-1 text-sm text-red-900">
+          {% for m, visible in duplicates %}
+            <li>
+              {% if visible %}
+                <a href="{% url 'beneficiaries:detail' m.person.pk %}" target="_blank" rel="noopener" class="font-medium underline">{{ m.person.full_name }}</a>,
+                {{ m.person.birth_date|date:"d.m.Y" }}, {{ m.person.get_status_display|lower }}{% if m.person.is_archived %}, в архиве{% endif %}
+              {% else %}
+                Карточка, к которой у вас нет доступа (куратор: {{ m.person.curator|default:"не назначен" }})
+              {% endif %}
+              — совпадает: {{ m.reasons|join:", " }}
+            </li>
+          {% endfor %}
+        </ul>
+        <p class="mt-2 text-sm text-red-900">Если это тот же человек и карточка не ваша — обратитесь к её куратору или администратору.</p>
+        <div class="mt-3">{% include "partials/checkbox.html" with field=form.confirm_duplicates %}</div>
+      </section>
+    {% endif %}
+
+    <fieldset class="card space-y-4">
+      <legend class="sr-only">Основное</legend>
+      <h2>Основное</h2>
+      <div class="grid gap-4 sm:grid-cols-3">
+        {% include "partials/field.html" with field=form.last_name %}
+        {% include "partials/field.html" with field=form.first_name %}
+        {% include "partials/field.html" with field=form.middle_name %}
+      </div>
+      <div class="grid gap-4 sm:grid-cols-3">
+        {% include "partials/field.html" with field=form.birth_date %}
+        {% include "partials/field.html" with field=form.phone %}
+      </div>
+      {% include "partials/field.html" with field=form.address %}
+    </fieldset>
+
+    <fieldset class="card space-y-4">
+      <legend class="sr-only">Случай</legend>
+      <h2>Случай</h2>
+      <div class="grid gap-4 sm:grid-cols-2">
+        {% include "partials/field.html" with field=form.category %}
+        {% include "partials/field.html" with field=form.source %}
+        {% if form.curator %}{% include "partials/field.html" with field=form.curator %}{% endif %}
+      </div>
+      {% include "partials/checkbox_list.html" with field=form.programs %}
+      <p class="form-help">Здоровье, инвалидность и документы вносятся в «Защищённые данные» после сохранения карточки.</p>
+    </fieldset>
+
+    <div class="flex flex-wrap gap-3">
+      <button type="submit" class="btn btn-primary">Сохранить</button>
+      <a href="{% if b %}{% url 'beneficiaries:detail' b.pk %}{% else %}{% url 'beneficiaries:list' %}{% endif %}" class="btn btn-secondary">Отмена</a>
+    </div>
+  </form>
+{% endblock %}

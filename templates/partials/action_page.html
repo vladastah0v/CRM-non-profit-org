@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{# Страница одного действия с карточкой: смена статуса, добавление записи, отзыв согласия.
+   Контекст: form, title, submit, back_url, subject_name, badge_class, badge_text;
+   по желанию: notes (список предупреждений), notes_title, intro, multipart. #}
+
+{% block title %}{{ title }}: {{ subject_name }}{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{{ back_url }}">← К карточке</a></nav>
+  <div class="max-w-lg">
+    <h1>{{ title }}</h1>
+    <p class="mb-6 mt-1 text-slate-600">{{ subject_name }}{% if badge_text %} · <span class="badge {{ badge_class }}">{{ badge_text }}</span>{% endif %}</p>
+
+    {% if intro %}<p class="mb-4 text-sm text-slate-700">{{ intro }}</p>{% endif %}
+
+    {% if notes %}
+      <div class="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="note">
+        <p class="font-medium">{{ notes_title }}</p>
+        <ul class="mt-1 list-disc pl-5">{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ul>
+      </div>
+    {% endif %}
+
+    <form method="post" class="card space-y-4" {% if multipart %}enctype="multipart/form-data"{% endif %} novalidate>
+      {% csrf_token %}
+      {% include "partials/form_errors.html" %}
+      {% for field in form %}
+        {% if field.field.widget.input_type == "checkbox" %}
+          {% include "partials/checkbox.html" with field=field %}
+        {% else %}
+          {% include "partials/field.html" with field=field %}
+        {% endif %}
+      {% endfor %}
+      <div class="flex flex-wrap gap-3">
+        <button type="submit" class="btn btn-primary">{{ submit }}</button>
+        <a href="{{ back_url }}" class="btn btn-secondary">Отмена</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

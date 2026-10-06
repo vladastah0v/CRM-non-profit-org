@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Защищённые данные: {{ b.full_name }}{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{% url 'beneficiaries:detail' b.pk %}">← К карточке</a></nav>
+  <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1>Защищённые данные</h1>
+      <p class="mt-1 text-slate-600">{{ b.full_name }}</p>
+    </div>
+    {% if not b.is_archived %}
+      <div class="flex flex-wrap gap-2">
+        <a href="{% url 'beneficiaries:sensitive_edit' b.pk %}" class="btn btn-secondary">Изменить</a>
+        <a href="{% url 'beneficiaries:document_add' b.pk %}" class="btn btn-primary">Загрузить документ</a>
+      </div>
+    {% endif %}
+  </div>
+
+  <p class="mb-4 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600" role="note">
+    Данные хранятся в зашифрованном виде. Каждый просмотр этой страницы записан в журнал аудита.
+    Не копируйте их в мессенджеры и почту.
+  </p>
+
+  <div class="grid gap-4 lg:grid-cols-2">
+    <section class="card" aria-labelledby="health-title">
+      <h2 id="health-title" class="mb-3">Здоровье и инвалидность</h2>
+      <dl class="space-y-3">
+        <div><dt class="text-sm text-slate-500">Здоровье</dt><dd class="whitespace-pre-line">{{ sensitive.health|default:"—" }}</dd></div>
+        <div><dt class="text-sm text-slate-500">Инвалидность</dt><dd class="whitespace-pre-line">{{ sensitive.disability|default:"—" }}</dd></div>
+      </dl>
+    </section>
+    <section class="card" aria-labelledby="docs-title">
+      <h2 id="docs-title" class="mb-3">Документы</h2>
+      <dl class="space-y-3">
+        <div><dt class="text-sm text-slate-500">Паспорт</dt><dd>{{ sensitive.passport|default:"—" }}</dd></div>
+        <div><dt class="text-sm text-slate-500">СНИЛС</dt><dd>{{ sensitive.snils|default:"—" }}</dd></div>
+      </dl>
+      <h3 class="mb-2 mt-4 text-sm font-semibold text-slate-700">Сканы</h3>
+      {% if documents %}
+        <ul class="divide-y divide-slate-100 text-sm">
+          {% for d, url in documents %}
+            <li class="flex items-center justify-between gap-3 py-2">
+              <span>{{ d.get_kind_display }}{% if d.title %} — {{ d.title }}{% endif %} <span class="text-slate-500">· {{ d.created_at|date:"d.m.Y" }}</span></span>
+              <a href="{{ url }}">Скачать</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-sm text-slate-600">Сканов нет.</p>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

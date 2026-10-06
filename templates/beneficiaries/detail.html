@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% load crm %}
+
+{% block title %}{{ b.full_name }}{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{% url 'beneficiaries:list' %}">← Все подопечные</a></nav>
+
+  <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h1>{{ b.full_name }}</h1>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <span class="badge {{ b.status_badge }}">{{ b.get_status_display }}</span>
+        {% if b.is_archived %}<span class="badge bg-slate-200 text-slate-700">в архиве</span>{% endif %}
+        {% if card.full and b.is_minor %}<span class="badge bg-amber-100 text-amber-800">несовершеннолетний</span>{% endif %}
+      </div>
+    </div>
+    {% if card.full %}
+      <div class="flex flex-wrap gap-2">
+        <a href="{% url 'beneficiaries:sensitive' b.pk %}" class="btn btn-secondary">Защищённые данные</a>
+        {% if not b.is_archived %}
+          <a href="{% url 'beneficiaries:edit' b.pk %}" class="btn btn-secondary">Изменить</a>
+          {% if card.is_admin %}<a href="{% url 'beneficiaries:curators' b.pk %}" class="btn btn-secondary">Кураторы</a>{% endif %}
+          {% if card.transitions %}<a href="{% url 'beneficiaries:status' b.pk %}" class="btn btn-primary">Сменить статус</a>{% endif %}
+          <form method="post" action="{% url 'beneficiaries:archive' b.pk %}" data-confirm="Перевести карточку в архив? Её можно будет вернуть.">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary">В архив</button>
+          </form>
+        {% else %}
+          <form method="post" action="{% url 'beneficiaries:restore' b.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">Вернуть из архива</button>
+          </form>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  {% if not card.full %}
+    {# Координатор: ограниченный набор полей «Ч (О)», матрица 2.2 #}
+    <section class="card max-w-2xl" aria-labelledby="contacts-title">
+      <h2 id="contacts-title" class="mb-3">Контакты</h2>
+      <dl class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <div><dt class="text-sm text-slate-500">Телефон</dt><dd>{% if b.phone %}<a href="tel:{{ b.phone }}">{{ b.phone|phone }}</a>{% else %}—{% endif %}</dd></div>
+        <div><dt class="text-sm text-slate-500">Адрес</dt><dd>{{ b.address|default:"—" }}</dd></div>
+        <div><dt class="text-sm text-slate-500">Категория</dt><dd>{{ b.category|default:"—" }}</dd></div>
+        <div><dt class="text-sm text-slate-500">Куратор</dt><dd>{{ b.curator|default:"не назначен" }}</dd></div>
+      </dl>
+      <p class="form-help mt-4">Показан ограниченный набор данных. Полная карточка — у куратора случая.</p>
+    </section>
+  {% else %}
+    {% if card.consent_missing %}
+      <div class="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900" role="alert">
+        Случай в работе, но действующего согласия нет. Изменения карточки заблокированы (ФТ-Д-02):
+        добавьте согласие или переведите случай на паузу.
+      </div>
+    {% endif %}
+    {% if card.show_in_work_hint %}
+      <div class="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="note">
+        <p class="font-medium">Для статуса «В работе» не хватает:</p>
+        <ul class="mt-1 list-disc pl-5">{% for p in card.in_work_problems %}<li>{{ p }}</li>{% endfor %}</ul>
+      </div>
+    {% endif %}
+
+    <div class="grid gap-4 lg:grid-cols-3">
+      <section class="card lg:col-span-2" aria-labelledby="main-title">
+        <h2 id="main-title" class="mb-3">Основное</h2>
+        <dl class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+          <div><dt class="text-sm text-slate-500">Дата рождения</dt><dd>{{ b.birth_date|date:"d.m.Y" }} ({{ b.age|ru_plural:"год,года,лет" }})</dd></div>
+          <div><dt class="text-sm text-slate-500">Телефон</dt><dd>{% if b.phone %}<a href="tel:{{ b.phone }}">{{ b.phone|phone }}</a>{% else %}—{% endif %}</dd></div>
+          <div class="sm:col-span-2"><dt class="text-sm text-slate-500">Адрес</dt><dd>{{ b.address|default:"—" }}</dd></div>
+          <div><dt class="text-sm text-slate-500">Категория</dt><dd>{{ b.category|default:"—" }}</dd></div>
+          <div><dt class="text-sm text-slate-500">Источник обращения</dt><dd>{{ b.source|default:"—" }}</dd></div>
+          <div><dt class="text-sm text-slate-500">Ответственный куратор</dt>
+            <dd>{{ b.curator|default:"не назначен" }}{% for a in card.shared_with %}<br><span class="text-sm text-slate-600">доступ: {{ a.user }}</span>{% endfor %}</dd></div>
+          <div><dt class="text-sm text-slate-500">В базе с</dt><dd>{{ b.created_at|date:"d.m.Y" }}</dd></div>
+          <div class="sm:col-span-2"><dt class="text-sm text-slate-500">Программы</dt>
+            <dd>{% for p in b.programs.all %}<span class="badge mb-1 mr-1 bg-brand-50 text-brand-700">{{ p }}</span>{% empty %}—{% endfor %}</dd></div>
+          {% if b.status == "closed" %}
+            <div class="sm:col-span-2"><dt class="text-sm text-slate-500">Закрыт {{ b.closed_on|date:"d.m.Y" }}</dt>
+              <dd>{{ b.closing_reason }}. {{ b.outcome|linebreaksbr }}</dd></div>
+          {% endif %}
+        </dl>
+      </section>
+
+      <section class="card" aria-labelledby="related-title">
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <h2 id="related-title">Связанные лица</h2>
+          {% if not b.is_archived %}<a href="{% url 'beneficiaries:related_add' b.pk %}" class="text-sm">+ Добавить</a>{% endif %}
+        </div>
+        {% if card.related_persons %}
+          <ul class="divide-y divide-slate-100 text-sm">
+            {% for p in card.related_persons %}
+              <li class="py-2">
+                <p><span class="font-medium">{{ p.full_name }}</span> · {{ p.relation }}
+                  {% if p.is_legal_representative %}<span class="badge ml-1 bg-amber-100 text-amber-800">законный представитель</span>{% endif %}</p>
+                <p class="text-slate-600">{% if p.phone %}<a href="tel:{{ p.phone }}">{{ p.phone|phone }}</a>{% endif %}{% if p.phone and p.email %} · {% endif %}{{ p.email }}</p>
+                {% if not b.is_archived %}
+                  <div class="mt-1 flex gap-3">
+                    <a href="{% url 'beneficiaries:related_edit' b.pk p.pk %}">Изменить</a>
+                    <form method="post" action="{% url 'beneficiaries:related_archive' b.pk p.pk %}" data-confirm="Убрать связанное лицо из карточки?">
+                      {% csrf_token %}
+                      <button type="submit" class="text-red-700 hover:text-red-800">Убрать</button>
+                    </form>
+                  </div>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-sm text-slate-600">Не добавлены.</p>
+        {% endif %}
+      </section>
+    </div>
+
+    <section class="card mt-4" aria-labelledby="consents-title">
+      <div class="mb-3 flex items-center justify-between gap-2">
+        <h2 id="consents-title">Согласия на обработку данных</h2>
+        {% if not b.is_archived %}<a href="{% url 'beneficiaries:consent_add' b.pk %}" class="text-sm">+ Добавить</a>{% endif %}
+      </div>
+      {% if card.consents %}
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead><tr><th scope="col">Вид</th><th scope="col">Подписано</th><th scope="col">Кто подписал</th><th scope="col">Действует до</th><th scope="col">Состояние</th><th scope="col"><span class="sr-only">Действия</span></th></tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              {% for c in card.consents %}
+                <tr>
+                  <td>{{ c.get_kind_display }}<br><span class="text-xs text-slate-500">{{ c.get_channel_display }}</span></td>
+                  <td class="whitespace-nowrap">{{ c.signed_on|date:"d.m.Y" }}</td>
+                  <td>{{ c.get_signer_display }}{% if c.signer_name %}: {{ c.signer_name }}{% endif %}</td>
+                  <td class="whitespace-nowrap">{{ c.valid_until|date:"d.m.Y"|default:"бессрочно" }}</td>
+                  <td>
+                    {% if c.state == "действует" %}<span class="badge bg-emerald-100 text-emerald-800">{{ c.state }}</span>
+                    {% else %}<span class="badge bg-red-100 text-red-800">{{ c.state }}</span>{% endif %}
+                    {% if c.revoked_on %}<br><span class="text-xs text-slate-500">отзыв {{ c.revoked_on|date:"d.m.Y" }}</span>{% endif %}
+                  </td>
+                  <td class="whitespace-nowrap text-right">
+                    {% with url=scan_urls|get_item:c.pk %}{% if url %}<a href="{{ url }}">Скан</a>{% endif %}{% endwith %}
+                    {% if not c.revoked_on %}<a href="{% url 'beneficiaries:consent_revoke' b.pk c.pk %}" class="ml-3 text-red-700 hover:text-red-800">Отозвать</a>{% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-slate-600">Согласий нет. Без действующего согласия случай нельзя взять в работу.</p>
+      {% endif %}
+    </section>
+
+    <section class="card mt-4" aria-labelledby="timeline-title">
+      <h2 id="timeline-title" class="mb-3">История</h2>
+      {% if card.timeline %}
+        <ol class="divide-y divide-slate-100 text-sm">
+          {% for e in card.timeline %}
+            <li class="py-2">
+              <span class="text-slate-500">{{ e.at|date:"d.m.Y H:i" }}</span> · <span class="font-medium">{{ e.title }}</span>
+              {% if e.details %}: {{ e.details }}{% endif %}
+              {% if e.author %}<span class="text-slate-500"> · {{ e.author }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="text-sm text-slate-600">Событий пока нет.</p>
+      {% endif %}
+      <p class="form-help mt-2">Заявки, оказанная помощь и взаимодействия появятся здесь с модулем «Заявки и помощь».</p>
+    </section>
+  {% endif %}
+{% endblock %}

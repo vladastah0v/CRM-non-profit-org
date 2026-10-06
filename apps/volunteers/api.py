@@ -24,11 +24,12 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.core import signatures
+from apps.core.dates import is_minor
 from apps.core.http import client_ip
 from apps.core.normalize import normalize_phone
 
 from . import services
-from .models import ADULT_AGE, Weekday, telegram_username_validator
+from .models import Weekday, telegram_username_validator
 
 logger = logging.getLogger(__name__)
 
@@ -112,15 +113,9 @@ class VolunteerIntakeSerializer(serializers.Serializer):
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         birth_date = attrs["birth_date"]
-        today = timezone.localdate()
-        age = (
-            today.year
-            - birth_date.year
-            - ((today.month, today.day) < (birth_date.month, birth_date.day))
-        )
-        if birth_date > today:
+        if birth_date > timezone.localdate():
             raise serializers.ValidationError({"birth_date": "Дата рождения в будущем."})
-        if age < ADULT_AGE:
+        if is_minor(birth_date):
             # ФТ-В-08: данные законного представителя и его согласие
             errors = {}
             if not attrs.get("guardian_name"):

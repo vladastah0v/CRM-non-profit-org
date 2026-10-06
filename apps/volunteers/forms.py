@@ -8,8 +8,8 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from apps.consents.models import ConsentKind, ConsentSigner
-from apps.core.forms import StyledFormMixin
+from apps.core.dates import is_minor
+from apps.core.forms import DateInput, StyledFormMixin, TimeInput
 from apps.core.models import (
     District,
     LeavingReason,
@@ -20,31 +20,8 @@ from apps.core.models import (
 )
 from apps.core.normalize import normalize_phone
 
-from .models import ADULT_AGE, Volunteer, VolunteerStatus, Weekday
+from .models import Volunteer, VolunteerStatus, Weekday
 from .services import AvailabilitySlot
-
-
-class DateInput(forms.DateInput):
-    input_type = "date"
-
-    def __init__(self, attrs: dict[str, Any] | None = None) -> None:
-        super().__init__(attrs, format="%Y-%m-%d")
-
-
-class TimeInput(forms.TimeInput):
-    input_type = "time"
-
-    def __init__(self, attrs: dict[str, Any] | None = None) -> None:
-        super().__init__(attrs, format="%H:%M")
-
-
-def _age_on_today(birth_date: datetime.date) -> int:
-    today = timezone.localdate()
-    return (
-        today.year
-        - birth_date.year
-        - ((today.month, today.day) < (birth_date.month, birth_date.day))
-    )
 
 
 class VolunteerForm(StyledFormMixin, forms.ModelForm):
@@ -122,8 +99,7 @@ class VolunteerForm(StyledFormMixin, forms.ModelForm):
     def clean(self) -> dict[str, Any]:
         super().clean()
         data = self.cleaned_data
-        birth_date = data.get("birth_date")
-        if birth_date and _age_on_today(birth_date) < ADULT_AGE:
+        if is_minor(data.get("birth_date")):
             # ФТ-В-08: для несовершеннолетних данные представителя обязательны
             if not data.get("guardian_name"):
                 self.add_error(
@@ -236,47 +212,3 @@ class HoursForm(StyledFormMixin, forms.Form):
         max_length=500,
         help_text="Обязателен: за что начислены часы.",
     )
-
-
-class ConsentForm(StyledFormMixin, forms.Form):
-    """ФТ-Д-01: тип, дата подписания, кто подписал, скан, срок действия."""
-
-    kind = forms.ChoiceField(label="Вид согласия", choices=ConsentKind.choices)
-    signed_on = forms.DateField(label="Дата подписания", widget=DateInput())
-    signer = forms.ChoiceField(label="Кто подписал", choices=ConsentSigner.choices)
-    signer_name = forms.CharField(
-        label="ФИО законного представителя",
-        max_length=300,
-        required=False,
-        help_text="Если согласие подписал представитель.",
-    )
-    valid_until = forms.DateField(
-        label="Действует до",
-        required=False,
-        widget=DateInput(),
-        help_text="Пусто — бессрочно до отзыва.",
-    )
-    scan = forms.FileField(
-        label="Скан",
-        required=False,
-        help_text="PDF или фото, до 20 МБ.",
-        widget=forms.ClearableFileInput(attrs={"accept": "application/pdf,image/*"}),
-    )
-
-    def __init__(self, *args: Any, volunteer: Volunteer, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        if volunteer.is_minor:
-            self.initial.setdefault("signer", ConsentSigner.REPRESENTATIVE)
-            self.initial.setdefault("signer_name", volunteer.guardian_name)
-
-    def clean(self) -> dict[str, Any]:
-        super().clean()
-        data = self.cleaned_data
-        if data.get("signer") == ConsentSigner.REPRESENTATIVE and not data.get("signer_name"):
-            self.add_error("signer_name", "Укажите ФИО законного представителя.")
-        return data
-
-
-class RevokeConsentForm(StyledFormMixin, forms.Form):
-    revoked_on = forms.DateField(label="Дата отзыва", widget=DateInput())
-    note = forms.CharField(label="Комментарий", max_length=500, required=False)

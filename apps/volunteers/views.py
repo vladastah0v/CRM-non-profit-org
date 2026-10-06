@@ -3,9 +3,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -17,17 +14,17 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from django.views.decorators.vary import vary_on_headers
 
 from apps.consents.files import make_download_url
+from apps.consents.forms import ConsentForm, RevokeConsentForm
 from apps.consents.models import Consent
 from apps.consents.services import create_volunteer_consent, revoke_consent
 from apps.core.list_filters import RESET_PARAM, restore_or_save
+from apps.core.pages import action_page, apply_service_errors
 
 from . import permissions, selectors, services
 from .filters import SAVED_PARAMS
 from .forms import (
     BaseAvailabilityFormSet,
-    ConsentForm,
     HoursForm,
-    RevokeConsentForm,
     StatusChangeForm,
     TrainingForm,
     VolunteerForm,
@@ -61,16 +58,6 @@ def _editable_volunteer(request: HttpRequest, pk: str) -> tuple[Volunteer, HttpR
         messages.error(request, "Карточка в архиве — сначала верните её из архива.")
         return volunteer, redirect("volunteers:detail", pk=volunteer.pk)
     return volunteer, None
-
-
-def apply_service_errors(form: forms.BaseForm, exc: ValidationError) -> None:
-    """Ошибки сервиса — в форму: по полям, если такое поле есть, иначе общей ошибкой."""
-    if hasattr(exc, "error_dict"):
-        for field, errors in exc.error_dict.items():
-            for error in errors:
-                form.add_error(field if field in form.fields else None, error)
-    else:
-        form.add_error(None, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -217,19 +204,6 @@ def volunteer_edit(request: HttpRequest, pk: str) -> HttpResponse:
 # ---------------------------------------------------------------------------
 # Действия с карточкой: статус, обучение, часы, согласия, архив
 # ---------------------------------------------------------------------------
-def _action_page(
-    request: HttpRequest,
-    volunteer: Volunteer,
-    form: forms.BaseForm,
-    *,
-    title: str,
-    submit: str,
-    extra: dict[str, Any] | None = None,
-) -> HttpResponse:
-    context = {"v": volunteer, "form": form, "title": title, "submit": submit, **(extra or {})}
-    return render(request, "volunteers/action_form.html", context)
-
-
 @login_required
 @require_http_methods(["GET", "POST"])
 def volunteer_status(request: HttpRequest, pk: str) -> HttpResponse:
@@ -260,9 +234,14 @@ def volunteer_status(request: HttpRequest, pk: str) -> HttpResponse:
     problems = []
     if VolunteerStatus.ACTIVE in transitions:
         problems = services.activation_problems(volunteer)
-    extra = {"activation_problems": problems}
-    return _action_page(
-        request, volunteer, form, title="Смена статуса", submit="Сменить статус", extra=extra
+    return action_page(
+        request,
+        form,
+        subject=volunteer,
+        title="Смена статуса",
+        submit="Сменить статус",
+        notes=problems,
+        notes_title="Перевод в «Активен» сейчас невозможен:",
     )
 
 
@@ -282,7 +261,9 @@ def training_add(request: HttpRequest, pk: str) -> HttpResponse:
         else:
             messages.success(request, "Обучение отмечено.")
             return redirect("volunteers:detail", pk=volunteer.pk)
-    return _action_page(request, volunteer, form, title="Пройденное обучение", submit="Добавить")
+    return action_page(
+        request, form, subject=volunteer, title="Пройденное обучение", submit="Добавить"
+    )
 
 
 @login_required
@@ -301,7 +282,7 @@ def hours_add(request: HttpRequest, pk: str) -> HttpResponse:
         else:
             messages.success(request, "Часы добавлены.")
             return redirect("volunteers:detail", pk=volunteer.pk)
-    return _action_page(request, volunteer, form, title="Часы вручную", submit="Добавить")
+    return action_page(request, form, subject=volunteer, title="Часы вручную", submit="Добавить")
 
 
 @login_required
@@ -311,7 +292,12 @@ def consent_add(request: HttpRequest, pk: str) -> HttpResponse:
     volunteer, blocked = _editable_volunteer(request, pk)
     if blocked:
         return blocked
-    form = ConsentForm(request.POST or None, request.FILES or None, volunteer=volunteer)
+    form = ConsentForm(
+        request.POST or None,
+        request.FILES or None,
+        minor=volunteer.is_minor,
+        representative_name=volunteer.guardian_name,
+    )
     if request.method == "POST" and form.is_valid():
         try:
             create_volunteer_consent(volunteer, **form.cleaned_data, request=request)
@@ -320,13 +306,13 @@ def consent_add(request: HttpRequest, pk: str) -> HttpResponse:
         else:
             messages.success(request, "Согласие добавлено.")
             return redirect("volunteers:detail", pk=volunteer.pk)
-    return _action_page(
+    return action_page(
         request,
-        volunteer,
         form,
+        subject=volunteer,
         title="Согласие на обработку данных",
         submit="Добавить",
-        extra={"multipart": True},
+        multipart=True,
     )
 
 
@@ -353,13 +339,13 @@ def consent_revoke(request: HttpRequest, pk: str, consent_pk: str) -> HttpRespon
                 "обезличивание выполняет администратор.",
             )
             return redirect("volunteers:detail", pk=volunteer.pk)
-    return _action_page(
+    return action_page(
         request,
-        volunteer,
         form,
+        subject=volunteer,
         title="Отзыв согласия",
         submit="Зафиксировать отзыв",
-        extra={"consent": consent},
+        intro=f"{consent} ({consent.get_signer_display().lower()}).",
     )
 
 

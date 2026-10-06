@@ -6,6 +6,8 @@ from .admin_base import CRMModelAdmin
 from .models import (
     AssistanceType,
     BeneficiaryCategory,
+    BeneficiarySource,
+    CaseClosingReason,
     District,
     LeavingReason,
     Program,
@@ -83,4 +85,14 @@ class TrainingTypeAdmin(ReferenceAdmin):
 
 @admin.register(VolunteerSource)
 class VolunteerSourceAdmin(ReferenceAdmin):
+    fields = ("name", "description", "sort_order", *ReferenceAdmin.readonly_fields)
+
+
+@admin.register(BeneficiarySource)
+class BeneficiarySourceAdmin(ReferenceAdmin):
+    fields = ("name", "description", "sort_order", *ReferenceAdmin.readonly_fields)
+
+
+@admin.register(CaseClosingReason)
+class CaseClosingReasonAdmin(ReferenceAdmin):
     fields = ("name", "description", "sort_order", *ReferenceAdmin.readonly_fields)

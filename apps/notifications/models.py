@@ -14,6 +14,8 @@ from apps.core.models import ArchivableQuerySet, BaseModel
 
 class NotificationKind(models.TextChoices):
     NEW_VOLUNTEER_APPLICATION = "new_volunteer_application", "Новая анкета волонтёра"
+    CONSENT_REVOKED = "consent_revoked", "Отзыв согласия"
+    CASE_ASSIGNED = "case_assigned", "Назначен случай подопечного"
 
 
 class NotificationQuerySet(ArchivableQuerySet):

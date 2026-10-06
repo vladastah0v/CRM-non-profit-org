@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Кураторы: {{ b.full_name }}{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{% url 'beneficiaries:detail' b.pk %}">← К карточке</a></nav>
+  <div class="max-w-2xl space-y-4">
+    <div>
+      <h1>Кураторы случая</h1>
+      <p class="mt-1 text-slate-600">{{ b.full_name }} · <span class="badge {{ b.status_badge }}">{{ b.get_status_display }}</span></p>
+    </div>
+
+    <form method="post" class="card space-y-4" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="action" value="assign">
+      <h2>Ответственный куратор</h2>
+      {% include "partials/form_errors.html" with form=curator_form %}
+      {% include "partials/field.html" with field=curator_form.curator %}
+      <button type="submit" class="btn btn-primary">Сохранить</button>
+    </form>
+
+    <section class="card space-y-4" aria-labelledby="shared-title">
+      <h2 id="shared-title">Доступ второго куратора</h2>
+      <p class="text-sm text-slate-600">Второй куратор видит карточку и защищённые данные так же, как ответственный (п. 2.3 ТЗ).</p>
+      {% if shared %}
+        <ul class="divide-y divide-slate-100 text-sm">
+          {% for a in shared %}
+            <li class="flex items-center justify-between gap-3 py-2">
+              <span><span class="font-medium">{{ a.user }}</span> <span class="text-slate-500">· открыт {{ a.created_at|date:"d.m.Y" }}{% if a.created_by %}, {{ a.created_by }}{% endif %}</span></span>
+              <form method="post" action="{% url 'beneficiaries:access_revoke' b.pk a.pk %}" data-confirm="Закрыть доступ к случаю?">
+                {% csrf_token %}
+                <button type="submit" class="text-red-700 hover:text-red-800">Закрыть доступ</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      <form method="post" class="space-y-3" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="grant">
+        {% include "partials/form_errors.html" with form=grant_form %}
+        {% include "partials/field.html" with field=grant_form.user %}
+        <button type="submit" class="btn btn-secondary">Открыть доступ</button>
+      </form>
+    </section>
+  </div>
+{% endblock %}

@@ -190,6 +190,22 @@ class VolunteerSource(ReferenceModel):
         verbose_name_plural = "источники прихода волонтёров"
 
 
+class BeneficiarySource(ReferenceModel):
+    """Источник обращения подопечного (ФТ-П-01): сайт, соцзащита, больница и т. п."""
+
+    class Meta(ReferenceModel.Meta):
+        verbose_name = "источник обращения"
+        verbose_name_plural = "источники обращения"
+
+
+class CaseClosingReason(ReferenceModel):
+    """Причина закрытия случая подопечного (ФТ-П-04)."""
+
+    class Meta(ReferenceModel.Meta):
+        verbose_name = "причина закрытия случая"
+        verbose_name_plural = "причины закрытия случая"
+
+
 # ---------------------------------------------------------------------------
 # Сохранённые фильтры списков (п. 3.10): не теряются после выхода из системы
 # ---------------------------------------------------------------------------

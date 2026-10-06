@@ -10,6 +10,10 @@
         <h2 class="mb-1">Волонтёры</h2>
         <p class="text-sm text-slate-600">Анкеты, статусы, обучение, часы и согласия.</p>
       </a>
+      <a href="{% url 'beneficiaries:list' %}" class="card block text-slate-900 transition hover:border-brand-500 hover:text-slate-900">
+        <h2 class="mb-1">Подопечные</h2>
+        <p class="text-sm text-slate-600">Случаи, связанные лица, согласия и история.</p>
+      </a>
     {% endif %}
     <a href="{% url 'notifications:list' %}" class="card block text-slate-900 transition hover:border-brand-500 hover:text-slate-900">
       <h2 class="mb-1">Уведомления{% if unread_notifications %} <span class="badge bg-red-100 text-red-800">{{ unread_notifications }}</span>{% endif %}</h2>

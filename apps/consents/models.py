@@ -16,10 +16,8 @@ from apps.core.models import ArchivableQuerySet, BaseModel
 class AttachmentQuerySet(ArchivableQuerySet):
     def visible_to(self, user: Any) -> Self:
         """Администратор видит все файлы, остальные — загруженные ими и файлы карточек,
-        к которым у них есть доступ: координатор — сканы согласий и фото волонтёров.
-
-        Доступ через карточки подопечных добавляется вместе с модулем «Подопечные».
-        """
+        к которым у них есть доступ: координатор — сканы согласий и фото волонтёров,
+        куратор — сканы согласий и документы своих подопечных."""
         if user_has_role(user, RoleCode.ADMIN):
             return self.all()
         if not getattr(user, "is_authenticated", False):
@@ -32,6 +30,13 @@ class AttachmentQuerySet(ArchivableQuerySet):
             )
             volunteer_photos = volunteer.objects.filter(photo=OuterRef("pk"))
             condition |= Q(Exists(volunteer_consents)) | Q(Exists(volunteer_photos))
+        if user_has_role(user, RoleCode.CURATOR):
+            beneficiary = apps.get_model("beneficiaries", "Beneficiary")
+            document = apps.get_model("beneficiaries", "BeneficiaryDocument")
+            own = beneficiary.objects.owned_by(user)
+            own_consents = Consent.objects.filter(scan=OuterRef("pk"), beneficiary__in=own)
+            own_documents = document.objects.filter(file=OuterRef("pk"), beneficiary__in=own)
+            condition |= Q(Exists(own_consents)) | Q(Exists(own_documents))
         return self.filter(condition)
 
 
@@ -82,15 +87,17 @@ class ConsentChannel(models.TextChoices):
 
 class ConsentQuerySet(ArchivableQuerySet):
     def visible_to(self, user: Any) -> Self:
-        """Матрица 2.2: администратор — все, координатор — согласия волонтёров.
-
-        Куратор (согласия своих подопечных) — с модулем «Подопечные».
-        """
+        """Матрица 2.2: администратор — все, координатор — согласия волонтёров,
+        куратор — согласия своих подопечных. Права нескольких ролей суммируются."""
         if user_has_role(user, RoleCode.ADMIN):
             return self.all()
+        condition = Q(pk__in=[])
         if user_has_role(user, RoleCode.COORDINATOR):
-            return self.filter(volunteer__isnull=False)
-        return self.none()
+            condition |= Q(volunteer__isnull=False)
+        if user_has_role(user, RoleCode.CURATOR):
+            beneficiary = apps.get_model("beneficiaries", "Beneficiary")
+            condition |= Q(beneficiary__in=beneficiary.objects.owned_by(user))
+        return self.filter(condition)
 
     def valid_on(self, day: datetime.date | None = None) -> Self:
         """Действующие на дату: подписаны, не истекли, не отозваны, не в архиве."""
@@ -104,12 +111,20 @@ class ConsentQuerySet(ArchivableQuerySet):
 
 
 class Consent(BaseModel):
-    """Согласие волонтёра или подопечного. Связь с карточкой — отдельными внешними ключами
-    (п. 4.2 ТЗ); ключ на подопечного появится вместе с модулем «Подопечные»."""
+    """Согласие волонтёра или подопечного. Связь с карточкой — двумя внешними ключами,
+    заполнен ровно один (п. 4.2 ТЗ)."""
 
     volunteer = models.ForeignKey(
         "volunteers.Volunteer",
         verbose_name="волонтёр",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="consents",
+    )
+    beneficiary = models.ForeignKey(
+        "beneficiaries.Beneficiary",
+        verbose_name="подопечный",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -155,9 +170,10 @@ class Consent(BaseModel):
         ordering = ["-signed_on", "-created_at"]
         constraints = [
             models.CheckConstraint(
-                condition=Q(volunteer__isnull=False),
-                name="consent_has_subject",
-                violation_error_message="Согласие должно относиться к карточке.",
+                condition=Q(volunteer__isnull=False, beneficiary__isnull=True)
+                | Q(volunteer__isnull=True, beneficiary__isnull=False),
+                name="consent_has_one_subject",
+                violation_error_message="Согласие относится ровно к одной карточке.",
             ),
             models.CheckConstraint(
                 condition=Q(valid_until__isnull=True) | Q(valid_until__gte=models.F("signed_on")),

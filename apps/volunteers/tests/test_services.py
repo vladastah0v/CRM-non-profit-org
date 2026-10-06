@@ -314,7 +314,7 @@ def test_ft_v_04_duplicate_by_phone(db):
             )
         )
     [match] = exc.value.matches
-    assert match.volunteer == original and match.reasons == ["телефон"]
+    assert match.person == original and match.reasons == ["телефон"]
 
 
 def test_ft_v_04_duplicate_by_email_case_insensitive(db):

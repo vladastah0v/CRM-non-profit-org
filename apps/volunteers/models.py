@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime
 import uuid
 from decimal import Decimal
 from typing import Any, Self
@@ -17,12 +16,11 @@ from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
 from apps.accounts.roles import RoleCode, user_has_role
+from apps.core.dates import ADULT_AGE, full_years
 from apps.core.models import ArchivableQuerySet, BaseModel
 from apps.core.normalize import normalize_email, normalize_name
 
 from . import permissions
-
-ADULT_AGE = 18
 
 telegram_username_validator = RegexValidator(
     r"^[A-Za-z0-9_]{5,32}$",
@@ -217,14 +215,9 @@ class Volunteer(BaseModel):
     def full_name(self) -> str:
         return " ".join(p for p in (self.last_name, self.first_name, self.middle_name) if p)
 
-    def age_on(self, day: datetime.date | None = None) -> int:
-        day = day or timezone.localdate()
-        before_birthday = (day.month, day.day) < (self.birth_date.month, self.birth_date.day)
-        return day.year - self.birth_date.year - before_birthday
-
     @property
     def age(self) -> int:
-        return self.age_on()
+        return full_years(self.birth_date)
 
     @property
     def is_minor(self) -> bool:

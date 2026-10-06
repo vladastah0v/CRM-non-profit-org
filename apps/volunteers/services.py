@@ -5,15 +5,14 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Sum
 from django.http import HttpRequest
 from django.utils import timezone
 
@@ -23,6 +22,7 @@ from apps.audit.services import log_event
 from apps.consents.files import PHOTO_TYPES, store_attachment
 from apps.consents.models import Consent, ConsentChannel, ConsentKind, ConsentSigner
 from apps.consents.services import create_volunteer_consent
+from apps.core.duplicates import PersonMatch, find_person_duplicates
 from apps.core.models import (
     District,
     LeavingReason,
@@ -58,9 +58,6 @@ TRANSITIONS: dict[str, frozenset[str]] = {
     S.LEFT: frozenset(),
 }
 
-# Порог похожести ФИО (pg_trgm) при совпадении даты рождения: ловит опечатки
-# («Иванова Мария» / «Иванова Марья»), но не однофамильцев с другим именем.
-NAME_SIMILARITY = 0.6
 INTAKE_SOURCE_NAME = "Сайт фонда"
 
 # Поля карточки, которые меняются через create/update (статус — только change_status)
@@ -85,12 +82,9 @@ AvailabilitySlot = tuple[int, datetime.time, datetime.time]
 
 
 # ---------------------------------------------------------------------------
-# Проверка дублей (ФТ-В-04)
+# Проверка дублей (ФТ-В-04) — общий механизм apps.core.duplicates
 # ---------------------------------------------------------------------------
-@dataclass
-class DuplicateMatch:
-    volunteer: Volunteer
-    reasons: list[str] = field(default_factory=list)
+DuplicateMatch = PersonMatch
 
 
 class DuplicateVolunteerError(ValidationError):
@@ -113,37 +107,17 @@ def find_duplicates(
     limit: int = 10,
 ) -> list[DuplicateMatch]:
     """Совпадение телефона, email или ФИО с датой рождения — включая архивные карточки."""
-    name = normalize_name(last_name, first_name, middle_name)
-    email = normalize_email(email)
-    name_matches: set[Any] = set()
-    if birth_date is not None and name:
-        name_matches = set(
-            Volunteer.objects.filter(birth_date=birth_date)
-            .annotate(similarity=TrigramSimilarity("search_name", name))
-            .filter(Q(search_name=name) | Q(similarity__gte=NAME_SIMILARITY))
-            .values_list("pk", flat=True)
-        )
-    condition = Q(pk__in=name_matches)
-    if phone:
-        condition |= Q(phone=phone)
-    if email:
-        condition |= Q(email=email)
-
-    candidates = Volunteer.objects.filter(condition).select_related("district")
-    if exclude_pk is not None:
-        candidates = candidates.exclude(pk=exclude_pk)
-
-    matches = []
-    for volunteer in candidates.order_by("-created_at")[:limit]:
-        match = DuplicateMatch(volunteer)
-        if phone and volunteer.phone == phone:
-            match.reasons.append("телефон")
-        if email and volunteer.email == email:
-            match.reasons.append("email")
-        if volunteer.pk in name_matches:
-            match.reasons.append("ФИО и дата рождения")
-        matches.append(match)
-    return matches
+    return find_person_duplicates(
+        Volunteer.objects.select_related("district"),
+        last_name=last_name,
+        first_name=first_name,
+        middle_name=middle_name,
+        birth_date=birth_date,
+        phone=phone,
+        email=email,
+        exclude_pk=exclude_pk,
+        limit=limit,
+    )
 
 
 def duplicates_of(volunteer: Volunteer) -> list[DuplicateMatch]:

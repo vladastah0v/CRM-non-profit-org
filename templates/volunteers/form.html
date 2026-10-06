@@ -19,8 +19,8 @@
         <ul class="mt-2 space-y-1 text-sm text-red-900">
           {% for m in duplicates %}
             <li>
-              <a href="{% url 'volunteers:detail' m.volunteer.pk %}" target="_blank" rel="noopener" class="font-medium underline">{{ m.volunteer.full_name }}</a>,
-              {{ m.volunteer.birth_date|date:"d.m.Y" }}, {{ m.volunteer.get_status_display|lower }}{% if m.volunteer.is_archived %}, в архиве{% endif %}
+              <a href="{% url 'volunteers:detail' m.person.pk %}" target="_blank" rel="noopener" class="font-medium underline">{{ m.person.full_name }}</a>,
+              {{ m.person.birth_date|date:"d.m.Y" }}, {{ m.person.get_status_display|lower }}{% if m.person.is_archived %}, в архиве{% endif %}
               — совпадает: {{ m.reasons|join:", " }}
             </li>
           {% endfor %}

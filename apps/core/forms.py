@@ -3,6 +3,22 @@ from typing import Any
 from django import forms
 
 
+class DateInput(forms.DateInput):
+    """Нативный выбор даты: браузер показывает ДД.ММ.ГГГГ, на сервер уходит ГГГГ-ММ-ДД."""
+
+    input_type = "date"
+
+    def __init__(self, attrs: dict[str, Any] | None = None) -> None:
+        super().__init__(attrs, format="%Y-%m-%d")
+
+
+class TimeInput(forms.TimeInput):
+    input_type = "time"
+
+    def __init__(self, attrs: dict[str, Any] | None = None) -> None:
+        super().__init__(attrs, format="%H:%M")
+
+
 class StyledFormMixin:
     """Добавляет классы Tailwind к виджетам формы — шаблоны остаются простыми."""
 

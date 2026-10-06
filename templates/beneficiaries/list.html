@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Подопечные{% endblock %}
+
+{% block content %}
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1>Подопечные</h1>
+    {% if can_create %}
+      <a href="{% url 'beneficiaries:create' %}" class="btn btn-primary">Добавить подопечного</a>
+    {% endif %}
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+    <aside>
+      {% with form=filter.form %}
+      <form method="get" action="{% url 'beneficiaries:list' %}" class="card space-y-4" role="search" aria-label="Поиск и фильтры"
+            hx-get="{% url 'beneficiaries:list' %}" hx-target="#beneficiary-results" hx-push-url="true"
+            hx-trigger="submit, change, input changed delay:400ms from:#id_q" hx-indicator="#results-loading">
+        <div>
+          <label for="id_q" class="form-label">Поиск</label>
+          <input type="search" name="q" id="id_q" value="{{ form.q.value|default:'' }}" class="form-input"
+                 placeholder="ФИО или телефон" autocomplete="off">
+        </div>
+        {% include "partials/field.html" with field=form.status %}
+        {% include "partials/field.html" with field=form.category %}
+        {% if full %}
+          {% include "partials/field.html" with field=form.program %}
+          {% if form.curator %}{% include "partials/field.html" with field=form.curator %}{% endif %}
+          {% include "partials/field.html" with field=form.archived %}
+        {% endif %}
+        {% include "partials/field.html" with field=form.sort %}
+        <div class="flex flex-wrap gap-2">
+          <button type="submit" class="btn btn-primary">Показать</button>
+          <a href="{% url 'beneficiaries:list' %}?{{ reset_param }}=1" class="btn btn-secondary">Сбросить</a>
+        </div>
+        <p class="form-help">Фильтры сохраняются и восстановятся при следующем входе. Текст поиска не сохраняется.</p>
+      </form>
+      {% endwith %}
+    </aside>
+
+    <section id="beneficiary-results" aria-live="polite">
+      {% include "beneficiaries/_results.html" %}
+    </section>
+  </div>
+{% endblock %}
