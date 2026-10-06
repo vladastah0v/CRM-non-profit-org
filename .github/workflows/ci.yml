@@ -66,7 +66,11 @@ jobs:
       - name: pytest
         run: pytest --cov --cov-report=term --cov-report=xml
       - name: Проверка настроек безопасности prod
-        run: python manage.py check --deploy --fail-level WARNING
+        # Ключ шифрования prod-настройки требуют при запуске. Для проверки — одноразовый,
+        # сгенерированный здесь же: в репозитории ключей нет (НФТ-ИБ-10)
+        run: |
+          export FIELD_ENCRYPTION_KEYS="ci:$(python -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
+          python manage.py check --deploy --fail-level WARNING
         env:
           DJANGO_SETTINGS_MODULE: config.settings.prod
           DJANGO_SECRET_KEY: ${{ github.run_id }}-ci-only-${{ github.sha }}-not-a-real-secret-key
