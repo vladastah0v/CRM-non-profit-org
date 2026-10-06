@@ -48,6 +48,44 @@
       <p class="form-help mt-4">Показан ограниченный набор данных. Полная карточка — у координатора волонтёров.</p>
     </section>
   {% else %}
+    {% if v.is_possible_duplicate %}
+      <section class="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900" aria-labelledby="dup-title">
+        <h2 id="dup-title" class="text-base text-red-900">Возможный дубль</h2>
+        {% if card.duplicates %}
+          <p class="mt-1">Похожие карточки — сравните и примите решение:</p>
+          <ul class="mt-2 space-y-1">
+            {% for m in card.duplicates %}
+              <li>
+                <a href="{% url 'volunteers:detail' m.volunteer.pk %}" target="_blank" rel="noopener" class="font-medium underline">{{ m.volunteer.full_name }}</a>,
+                {{ m.volunteer.birth_date|date:"d.m.Y" }}, {{ m.volunteer.phone|phone }},
+                {{ m.volunteer.get_status_display|lower }}{% if m.volunteer.is_archived %}, в архиве{% endif %}
+                — совпадает: <strong>{{ m.reasons|join:", " }}</strong>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="mt-1">Похожих карточек больше нет — их изменили или данные этой карточки исправлены. Пометку можно снять.</p>
+        {% endif %}
+        {% if card.can_manage and not v.is_archived %}
+          <div class="mt-3 flex flex-wrap gap-2">
+            <form method="post" action="{% url 'volunteers:duplicate_resolve' v.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="decision" value="different">
+              <button type="submit" class="btn btn-secondary">Это другой человек</button>
+            </form>
+            {% if card.duplicates %}
+              <form method="post" action="{% url 'volunteers:duplicate_resolve' v.pk %}"
+                    data-confirm="Перевести эту карточку в архив как дубль? Перед этим перенесите нужные сведения в основную карточку.">
+                {% csrf_token %}
+                <input type="hidden" name="decision" value="same">
+                <button type="submit" class="btn btn-danger">Это тот же человек — в архив</button>
+              </form>
+            {% endif %}
+          </div>
+        {% endif %}
+      </section>
+    {% endif %}
+
     {% if card.show_activation_hint %}
       <div class="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="note">
         <p class="font-medium">Для статуса «Активен» не хватает:</p>

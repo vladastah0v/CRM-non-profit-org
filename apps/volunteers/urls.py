@@ -18,6 +18,7 @@ urlpatterns = [
         views.consent_revoke,
         name="consent_revoke",
     ),
+    path("<uuid:pk>/duplicate/", views.duplicate_resolve, name="duplicate_resolve"),
     path("<uuid:pk>/archive/", views.volunteer_archive, name="archive"),
     path("<uuid:pk>/restore/", views.volunteer_restore, name="restore"),
 ]

@@ -265,6 +265,80 @@ def test_archived_card_forms_redirect(coordinator_client, make_volunteer):
     assert coordinator_client.get(revoke).status_code == 200
 
 
+# --- ФТ-В-04: разбор пометки «возможный дубль» -------------------------------------------------
+
+
+def _flagged_pair(make_volunteer):
+    original = make_volunteer(last_name="Оригиналова", phone="+79035550011")
+    duplicate = make_volunteer(last_name="Копиева", phone="+79035550011")
+    Volunteer.objects.filter(pk=duplicate.pk).update(is_possible_duplicate=True)
+    duplicate.refresh_from_db()
+    return original, duplicate
+
+
+def test_card_lists_matches_with_reasons(coordinator_client, make_volunteer):
+    original, duplicate = _flagged_pair(make_volunteer)
+    page = coordinator_client.get(duplicate.get_absolute_url()).content.decode()
+    assert "Возможный дубль" in page
+    assert original.get_absolute_url() in page and "Оригиналова" in page
+    assert "совпадает: <strong>телефон</strong>" in page
+    assert "Это другой человек" in page and "Это тот же человек" in page
+
+
+def test_different_person_clears_flag(coordinator_client, make_volunteer):
+    _, duplicate = _flagged_pair(make_volunteer)
+    url = reverse("volunteers:duplicate_resolve", args=[duplicate.pk])
+    response = coordinator_client.post(url, {"decision": "different"})
+    assert response.status_code == 302
+    duplicate.refresh_from_db()
+    assert not duplicate.is_possible_duplicate and not duplicate.is_archived
+    log = AuditLog.objects.filter(action=AuditAction.UPDATE, object_id=str(duplicate.pk)).get()
+    assert log.extra == {"duplicate": "different_person"}
+    assert (
+        "Возможный дубль"
+        not in coordinator_client.get(duplicate.get_absolute_url()).content.decode()
+    )
+
+
+def test_same_person_archives_card(coordinator_client, make_volunteer):
+    original, duplicate = _flagged_pair(make_volunteer)
+    url = reverse("volunteers:duplicate_resolve", args=[duplicate.pk])
+    coordinator_client.post(url, {"decision": "same"})
+    duplicate.refresh_from_db()
+    original.refresh_from_db()
+    assert duplicate.is_archived and duplicate.is_possible_duplicate
+    assert not original.is_archived
+    actions = set(
+        AuditLog.objects.filter(object_id=str(duplicate.pk)).values_list("action", flat=True)
+    )
+    assert AuditAction.ARCHIVE in actions
+
+
+def test_duplicate_resolve_rules(coordinator_client, make_user, verified_client, make_volunteer):
+    _, duplicate = _flagged_pair(make_volunteer)
+    url = reverse("volunteers:duplicate_resolve", args=[duplicate.pk])
+    assert coordinator_client.get(url).status_code == 405  # только POST
+    coordinator_client.post(url, {"decision": "maybe"})  # неизвестное решение
+    duplicate.refresh_from_db()
+    assert duplicate.is_possible_duplicate
+    # Куратор не принимает решение и не видит блок
+    curator = verified_client(make_user("curator"))
+    assert curator.post(url, {"decision": "different"}).status_code == 403
+    assert "Возможный дубль" not in curator.get(duplicate.get_absolute_url()).content.decode()
+    # Карточка без пометки — сервис отказывает
+    clean = make_volunteer()
+    with pytest.raises(services.ValidationError, match="не помечена"):
+        services.resolve_duplicate(clean, same_person=False)
+
+
+def test_filter_only_duplicates(coordinator_client, make_volunteer, make_user, verified_client):
+    _flagged_pair(make_volunteer)
+    assert _names(coordinator_client.get(LIST, {"duplicates": "1"})) == ["Копиева"]
+    # У куратора такого фильтра нет — параметр игнорируется
+    curator = verified_client(make_user("curator"))
+    assert len(_names(curator.get(LIST, {"duplicates": "1"}))) == 2
+
+
 def test_get_does_not_archive(coordinator_client, make_volunteer):
     v = make_volunteer()
     assert coordinator_client.get(reverse("volunteers:archive", args=[v.pk])).status_code == 405

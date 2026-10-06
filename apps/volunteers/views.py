@@ -365,6 +365,33 @@ def consent_revoke(request: HttpRequest, pk: str, consent_pk: str) -> HttpRespon
 
 @login_required
 @require_POST
+def duplicate_resolve(request: HttpRequest, pk: str) -> HttpResponse:
+    """ФТ-В-04: решение по пометке «возможный дубль» — другой человек или тот же."""
+    volunteer, blocked = _editable_volunteer(request, pk)
+    if blocked:
+        return blocked
+    decision = request.POST.get("decision")
+    if decision not in {"different", "same"}:
+        messages.error(request, "Не выбрано решение по возможному дублю.")
+        return redirect("volunteers:detail", pk=volunteer.pk)
+    try:
+        services.resolve_duplicate(volunteer, same_person=decision == "same", request=request)
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+    else:
+        if decision == "same":
+            messages.success(
+                request,
+                "Карточка переведена в архив как дубль. Перенесите нужные сведения "
+                "в основную карточку.",
+            )
+        else:
+            messages.success(request, "Пометка «возможный дубль» снята.")
+    return redirect("volunteers:detail", pk=volunteer.pk)
+
+
+@login_required
+@require_POST
 def volunteer_archive(request: HttpRequest, pk: str) -> HttpResponse:
     volunteer = selectors.get_managed_volunteer(request.user, pk)
     services.archive_volunteer(volunteer, request=request)

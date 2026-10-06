@@ -33,6 +33,7 @@
             {% include "partials/field.html" with field=form.weekday %}
             {% include "partials/field.html" with field=form.time %}
           </div>
+          {% include "partials/field.html" with field=form.duplicates %}
           {% include "partials/field.html" with field=form.archived %}
         {% endif %}
         {% include "partials/field.html" with field=form.sort %}

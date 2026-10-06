@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
@@ -22,7 +22,13 @@ from .models import (
     VolunteerStatusChange,
     VolunteerTraining,
 )
-from .services import activation_problems, allowed_transitions, total_hours
+from .services import (
+    DuplicateMatch,
+    activation_problems,
+    allowed_transitions,
+    duplicates_of,
+    total_hours,
+)
 
 
 def volunteer_list(user: Any, params: QueryDict) -> VolunteerFilter:
@@ -69,6 +75,7 @@ class VolunteerCard:
     status_changes: list[VolunteerStatusChange]
     transitions: list[str]
     activation_problems: list[str]
+    duplicates: list[DuplicateMatch] = field(default_factory=list)
 
     @property
     def show_activation_hint(self) -> bool:
@@ -100,4 +107,5 @@ def volunteer_card(user: Any, volunteer: Volunteer) -> VolunteerCard:
         status_changes=changes,
         transitions=allowed_transitions(volunteer) if not volunteer.is_archived else [],
         activation_problems=activation_problems(volunteer),
+        duplicates=duplicates_of(volunteer) if volunteer.is_possible_duplicate else [],
     )

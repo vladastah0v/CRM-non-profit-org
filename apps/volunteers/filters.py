@@ -27,7 +27,17 @@ SORTS: dict[str, tuple[str, list[str]]] = {
 DEFAULT_SORT = "name"
 
 # Параметры, которые сохраняются в профиле (без текста поиска — в нём бывают ПДн)
-SAVED_PARAMS = ("status", "skills", "district", "program", "weekday", "time", "archived", "sort")
+SAVED_PARAMS = (
+    "status",
+    "skills",
+    "district",
+    "program",
+    "weekday",
+    "time",
+    "duplicates",
+    "archived",
+    "sort",
+)
 # Куратору доступны только фильтры по полям ограниченного набора «О»
 CURATOR_FILTERS = ("q", "status", "skills", "district", "sort")
 
@@ -66,6 +76,12 @@ class VolunteerFilter(django_filters.FilterSet):
         label="в … часов",
         method="filter_availability",
         widget=forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
+    )
+    duplicates = django_filters.ChoiceFilter(
+        label="Дубли",
+        choices=[("1", "Только возможные дубли")],
+        empty_label="Все карточки",
+        method="filter_duplicates",
     )
     archived = django_filters.ChoiceFilter(
         label="Архив",
@@ -133,6 +149,9 @@ class VolunteerFilter(django_filters.FilterSet):
         if time is not None:
             condition &= Q(availability__time_from__lte=time, availability__time_to__gt=time)
         return queryset.filter(condition) if condition else queryset
+
+    def filter_duplicates(self, queryset: QuerySet, name: str, value: str) -> QuerySet:
+        return queryset.filter(is_possible_duplicate=True) if value == "1" else queryset
 
     def filter_archived(self, queryset: QuerySet, name: str, value: str) -> QuerySet:
         if value == "1":

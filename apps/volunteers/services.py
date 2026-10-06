@@ -146,6 +146,48 @@ def find_duplicates(
     return matches
 
 
+def duplicates_of(volunteer: Volunteer) -> list[DuplicateMatch]:
+    """Карточки, похожие на эту (для пометки «возможный дубль» в карточке)."""
+    return find_duplicates(
+        phone=volunteer.phone,
+        email=volunteer.email,
+        last_name=volunteer.last_name,
+        first_name=volunteer.first_name,
+        middle_name=volunteer.middle_name,
+        birth_date=volunteer.birth_date,
+        exclude_pk=volunteer.pk,
+    )
+
+
+@transaction.atomic
+def resolve_duplicate(
+    volunteer: Volunteer, *, same_person: bool, request: HttpRequest | None = None
+) -> None:
+    """Решение координатора по пометке «возможный дубль» (ФТ-В-04).
+
+    - другой человек — пометка снимается, карточка остаётся в работе;
+    - тот же человек — карточка уходит в архив (пометка остаётся: это и есть дубль).
+      Нужные сведения координатор переносит в основную карточку сам.
+    """
+    ensure_editable(volunteer)
+    if not volunteer.is_possible_duplicate:
+        raise ValidationError("Карточка не помечена как возможный дубль.")
+    if same_person:
+        archive_volunteer(volunteer, request=request)
+        decision = "same_person"
+    else:
+        volunteer.is_possible_duplicate = False
+        volunteer.save(update_fields=["is_possible_duplicate"])
+        decision = "different_person"
+    log_event(
+        AuditAction.UPDATE,
+        request=request,
+        obj=volunteer,
+        fields=["is_possible_duplicate"],
+        extra={"duplicate": decision},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Создание и изменение карточки (ФТ-В-01, ФТ-В-08)
 # ---------------------------------------------------------------------------
@@ -527,17 +569,7 @@ def create_from_intake(
         districts = _match_by_name(District, [application.district_name])
         volunteer.district = districts[0] if len(districts) == 1 else None
     volunteer.source, _ = VolunteerSource.objects.get_or_create(name=INTAKE_SOURCE_NAME)
-    volunteer.is_possible_duplicate = bool(
-        find_duplicates(
-            phone=volunteer.phone,
-            email=volunteer.email,
-            last_name=volunteer.last_name,
-            first_name=volunteer.first_name,
-            middle_name=volunteer.middle_name,
-            birth_date=volunteer.birth_date,
-            limit=1,
-        )
-    )
+    volunteer.is_possible_duplicate = bool(duplicates_of(volunteer))
     volunteer.save()
     volunteer.skills.set(_match_by_name(Skill, application.skill_names))
     _set_availability(volunteer, application.availability)
