@@ -47,6 +47,7 @@ from apps.shifts.models import Assignment, AssignmentStatusChange
 from apps.shifts.services import cancel_for_beneficiary, cancel_for_volunteer
 from apps.volunteers.models import (
     Volunteer,
+    VolunteerDocument,
     VolunteerHours,
     VolunteerStatus,
     VolunteerStatusChange,
@@ -155,6 +156,9 @@ def anonymize_volunteer(
         volunteer.user.save(update_fields=["is_active"])
 
     volunteer.availability.all().delete()
+    # Документы (медкнижка, справка о несудимости) — удаляются вместе со сканами
+    documents = list(VolunteerDocument.objects.filter(volunteer=volunteer).select_related("scan"))
+    VolunteerDocument.objects.filter(pk__in=[d.pk for d in documents]).delete()
     VolunteerHours.objects.filter(volunteer=volunteer).update(comment=ANONYMIZED_NAME)
     VolunteerStatusChange.objects.filter(volunteer=volunteer).update(comment="")
     consents = Consent.objects.filter(volunteer=volunteer).select_related("scan")
@@ -166,7 +170,7 @@ def anonymize_volunteer(
     _erase_card_notes(volunteer=volunteer)
 
     _finish(volunteer, now, basis, document, request)
-    _delete_files([photo])
+    _delete_files([photo, *(d.scan for d in documents)])
     return volunteer
 
 

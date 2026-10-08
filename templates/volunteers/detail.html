@@ -164,7 +164,7 @@
         {% if card.can_manage and not v.is_archived %}<a href="{% url 'volunteers:consent_add' v.pk %}" class="shrink-0 whitespace-nowrap text-sm">+ Добавить</a>{% endif %}
       </div>
       {% if card.consents %}
-        <div class="overflow-x-auto">
+        <div class="relative overflow-x-auto">
           <table class="table">
             <thead><tr><th scope="col">Вид</th><th scope="col">Подписано</th><th scope="col">Кто подписал</th><th scope="col">Действует до</th><th scope="col">Состояние</th><th scope="col"><span class="sr-only">Действия</span></th></tr></thead>
             <tbody class="divide-y divide-slate-100">
@@ -190,6 +190,51 @@
         </div>
       {% else %}
         <p class="text-sm text-slate-600">Согласий нет. Без действующего согласия волонтёра нельзя перевести в статус «Активен».</p>
+      {% endif %}
+    </section>
+
+    <section class="card mt-4" aria-labelledby="documents-title">
+      <div class="mb-3 flex items-center justify-between gap-2">
+        <h2 id="documents-title">Документы</h2>
+        {% if card.can_manage and not v.is_archived %}<a href="{% url 'volunteers:document_add' v.pk %}" class="shrink-0 whitespace-nowrap text-sm">+ Добавить</a>{% endif %}
+      </div>
+      {% if card.documents %}
+        <div class="relative overflow-x-auto">
+          <table class="table">
+            {# Три колонки: состояние срока видно на смартфоне без прокрутки таблицы #}
+            <thead><tr><th scope="col">Вид</th><th scope="col">Действует до</th><th scope="col"><span class="sr-only">Действия</span></th></tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              {% for row in card.documents %}
+                {% with d=row.document %}
+                  <tr>
+                    <td>
+                      {{ d.document_type }}
+                      {% if d.issued_on or d.comment %}<br><span class="text-xs text-slate-500">{% if d.issued_on %}выдан {{ d.issued_on|date:"d.m.Y" }}{% endif %}{% if d.issued_on and d.comment %} · {% endif %}{{ d.comment }}</span>{% endif %}
+                    </td>
+                    <td class="whitespace-nowrap">
+                      {{ d.valid_until|date:"d.m.Y"|default:"бессрочно" }}<br>
+                      {% if row.state == "действует" %}<span class="badge bg-emerald-100 text-emerald-800">{{ row.state }}</span>
+                      {% elif row.state == "истекает" %}<span class="badge bg-amber-100 text-amber-800">{{ row.state }}</span>
+                      {% elif row.state == "истёк" %}<span class="badge bg-red-100 text-red-800">{{ row.state }}</span>
+                      {% else %}<span class="badge bg-slate-100 text-slate-700">{{ row.state }}</span>{% endif %}
+                    </td>
+                    <td class="whitespace-nowrap text-right">
+                      {% with url=scan_urls|get_item:d.pk %}{% if url %}<a href="{{ url }}">Скан</a>{% endif %}{% endwith %}
+                      {% if card.can_manage and not v.is_archived %}
+                        <form method="post" action="{% url 'volunteers:document_archive' v.pk d.pk %}" class="ml-3 inline" data-confirm="Убрать запись «{{ d.document_type }}» в архив? Напоминаний по ней больше не будет.">
+                          {% csrf_token %}
+                          <button type="submit" class="text-red-700 hover:text-red-800">Убрать</button>
+                        </form>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-slate-600">Документов нет. Медкнижку, справку об отсутствии судимости и другие документы со сроком действия добавьте здесь — за 30 дней до срока придёт напоминание.</p>
       {% endif %}
     </section>
 

@@ -24,6 +24,9 @@ class NotificationKind(models.TextChoices):
     ASSIGNMENT_DECLINED = "assignment_declined", "Волонтёр отказался от смены или визита"
     IMPORT_FINISHED = "import_finished", "Импорт данных"
     RETENTION_REPORT = "retention_report", "Обезличивание по сроку хранения"
+    CONSENT_EXPIRING = "consent_expiring", "Срок согласия"
+    DOCUMENT_EXPIRING = "document_expiring", "Срок документа волонтёра"
+    VOLUNTEERS_IDLE = "volunteers_idle", "Волонтёры без смен"
 
 
 class NotificationQuerySet(ArchivableQuerySet):

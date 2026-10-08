@@ -16,6 +16,7 @@ from apps.core.models import (
     Program,
     Skill,
     TrainingType,
+    VolunteerDocumentType,
     VolunteerSource,
 )
 from apps.core.normalize import normalize_phone
@@ -192,6 +193,41 @@ class TrainingForm(StyledFormMixin, forms.Form):
     )
     completed_on = forms.DateField(label="Дата прохождения", widget=DateInput())
     conducted_by = forms.CharField(label="Кто провёл", max_length=200, required=False)
+
+
+class DocumentForm(StyledFormMixin, forms.Form):
+    """ФТ-В-09: медкнижка, справка об отсутствии судимости и другие документы со сроком."""
+
+    document_type = forms.ModelChoiceField(
+        label="Вид документа", queryset=VolunteerDocumentType.objects.active()
+    )
+    issued_on = forms.DateField(label="Дата выдачи", required=False, widget=DateInput())
+    valid_until = forms.DateField(
+        label="Действует до",
+        required=False,
+        widget=DateInput(),
+        help_text="Пусто — бессрочно. За 30 дней до срока координаторы получат напоминание.",
+    )
+    scan = forms.FileField(
+        label="Скан",
+        required=False,
+        help_text="PDF или фото, до 20 МБ.",
+        widget=forms.ClearableFileInput(attrs={"accept": "application/pdf,image/*"}),
+    )
+    comment = forms.CharField(
+        label="Комментарий",
+        max_length=300,
+        required=False,
+        help_text="Без номера документа и сведений о здоровье.",
+    )
+
+    def clean(self) -> dict[str, Any]:
+        super().clean()
+        data = self.cleaned_data
+        issued, until = data.get("issued_on"), data.get("valid_until")
+        if issued and until and until < issued:
+            self.add_error("valid_until", "Срок действия заканчивается раньше даты выдачи.")
+        return data
 
 
 class HoursForm(StyledFormMixin, forms.Form):

@@ -26,6 +26,7 @@ from . import permissions, selectors, services
 from .filters import SAVED_PARAMS
 from .forms import (
     BaseAvailabilityFormSet,
+    DocumentForm,
     HoursForm,
     StatusChangeForm,
     TrainingForm,
@@ -33,7 +34,7 @@ from .forms import (
     availability_formset,
     availability_initial,
 )
-from .models import Volunteer, VolunteerStatus
+from .models import Volunteer, VolunteerDocument, VolunteerStatus
 
 LIST_KEY = "volunteers"
 PAGE_SIZE = 25
@@ -109,6 +110,11 @@ def volunteer_detail(request: HttpRequest, pk: str) -> HttpResponse:
         consent.pk: make_download_url(consent.scan, request.user)
         for consent in card.consents
         if consent.scan is not None
+    }
+    scan_urls |= {
+        row.document.pk: make_download_url(row.document.scan, request.user)
+        for row in card.documents
+        if row.document.scan is not None
     }
     return render(
         request,
@@ -273,6 +279,48 @@ def training_add(request: HttpRequest, pk: str) -> HttpResponse:
     return action_page(
         request, form, subject=volunteer, title="Пройденное обучение", submit="Добавить"
     )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def document_add(request: HttpRequest, pk: str) -> HttpResponse:
+    """ФТ-В-09: документ со сроком действия и сканом."""
+    volunteer, blocked = _editable_volunteer(request, pk)
+    if blocked:
+        return blocked
+    form = DocumentForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            services.add_document(volunteer, **form.cleaned_data, request=request)
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
+        else:
+            messages.success(request, "Документ добавлен.")
+            return redirect("volunteers:detail", pk=volunteer.pk)
+    return action_page(
+        request,
+        form,
+        subject=volunteer,
+        title="Документ волонтёра",
+        submit="Добавить",
+        multipart=True,
+        intro="Новый документ того же вида заменит прежний: напоминание о сроке придёт по новому.",
+    )
+
+
+@login_required
+@require_POST
+def document_archive(request: HttpRequest, pk: str, document_pk: str) -> HttpResponse:
+    """Ошибочная запись о документе — в архив."""
+    volunteer, blocked = _editable_volunteer(request, pk)
+    if blocked:
+        return blocked
+    document = get_object_or_404(
+        VolunteerDocument.objects.filter(volunteer=volunteer, is_archived=False), pk=document_pk
+    )
+    services.archive_document(document, request=request)
+    messages.success(request, f"Запись «{document}» убрана в архив.")
+    return redirect("volunteers:detail", pk=volunteer.pk)
 
 
 @login_required

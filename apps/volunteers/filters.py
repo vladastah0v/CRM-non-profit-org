@@ -7,14 +7,14 @@ from typing import Any, ClassVar
 
 import django_filters
 from django import forms
-from django.db.models import Max, Q, QuerySet
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 
 from apps.core.filters import PersonFilterSet
 from apps.core.forms import TimeInput
 from apps.core.models import District, Program, Skill
-from apps.shifts.models import AssignmentKind, AssignmentStatus
 
+from . import activity
 from .models import VolunteerStatus, Weekday
 
 # Параметры, которые сохраняются в профиле (без текста поиска — в нём бывают ПДн)
@@ -69,6 +69,7 @@ class VolunteerFilter(PersonFilterSet):
             ("30", "За последние 30 дней"),
             ("60+", "Больше 60 дней назад или ни одной"),
             ("never", "Ни одной смены"),
+            ("idle", f"Активные без смен больше {activity.IDLE_DAYS} дней"),
         ],
         empty_label="Не важно",
         method="filter_last_shift",
@@ -102,16 +103,9 @@ class VolunteerFilter(PersonFilterSet):
 
     def filter_last_shift(self, queryset: QuerySet, name: str, value: str) -> QuerySet:
         """По последней смене, на которой волонтёр отмечен как пришедший."""
-        queryset = queryset.annotate(
-            last_shift_at=Max(
-                "assignments__shift__starts_at",
-                filter=Q(
-                    assignments__kind=AssignmentKind.SHIFT,
-                    assignments__status=AssignmentStatus.ATTENDED,
-                    assignments__is_archived=False,
-                ),
-            )
-        )
+        if value == "idle":  # как в сводке координатору (ФТ-У-05)
+            return activity.idle(queryset)
+        queryset = activity.with_last_shift(queryset)
         now = timezone.now()
         if value == "30":
             return queryset.filter(last_shift_at__gte=now - datetime.timedelta(days=30))

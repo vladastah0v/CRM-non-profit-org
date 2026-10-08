@@ -103,6 +103,22 @@ def test_coordinator_filters_without_reload(page: Page, errors: list[str]) -> No
     assert errors == []
 
 
+def test_coordinator_sees_expiring_document(phone: Page, errors: list[str]) -> None:
+    """Срок документа волонтёра виден в карточке (ФТ-В-09), в том числе на смартфоне."""
+    login(phone, "coordinator")
+    phone.goto(f"{BASE_URL}/volunteers/")
+    phone.get_by_role("link", name=re.compile("Волонтёрова")).first.click()
+    documents = phone.get_by_role("region", name="Документы")
+    expect(documents).to_contain_text("Личная медицинская книжка")
+    expect(documents).to_contain_text("истекает")
+    assert no_horizontal_scroll(phone), "горизонтальная прокрутка: карточка волонтёра"
+    documents.scroll_into_view_if_needed()
+    # Состояние срока видно сразу, без прокрутки таблицы вбок
+    expect(documents.get_by_text("истекает", exact=True)).to_be_in_viewport()
+    shot(phone, "360-карточка-волонтёра")
+    assert errors == []
+
+
 def test_analyst_downloads_report(page: Page, errors: list[str]) -> None:
     """Отчёт по программе открывается и выгружается в Excel."""
     login(page, "analyst")

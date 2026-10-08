@@ -182,6 +182,15 @@ class TrainingType(ReferenceModel):
         verbose_name_plural = "типы обучения"
 
 
+class VolunteerDocumentType(ReferenceModel):
+    """Документы волонтёра со сроком действия (ФТ-В-09): медицинская книжка, справка об
+    отсутствии судимости и другие."""
+
+    class Meta(ReferenceModel.Meta):
+        verbose_name = "вид документа волонтёра"
+        verbose_name_plural = "виды документов волонтёров"
+
+
 class VolunteerSource(ReferenceModel):
     """Источник прихода волонтёра (ФТ-В-01): сайт, знакомые, мероприятие и т. п."""
 

@@ -11,13 +11,14 @@ from django.conf import settings
 from django.contrib.postgres.indexes import GinIndex
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q, Value
+from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
 from apps.accounts.roles import RoleCode, user_has_role
-from apps.core.dates import ADULT_AGE, erasure_deadline, full_years
+from apps.core.dates import ADULT_AGE, erasure_deadline, expires_soon, full_years
 from apps.core.models import ArchivableQuerySet, BaseModel
 from apps.core.normalize import normalize_email, normalize_name
 
@@ -289,6 +290,86 @@ class VolunteerTraining(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.training_type} — {self.completed_on:%d.%m.%Y}"
+
+
+# «Бессрочно» при сравнении сроков — дольше любой даты
+FOREVER = datetime.date(9999, 12, 31)
+
+
+class VolunteerDocumentQuerySet(ArchivableQuerySet):
+    def current(self) -> Self:
+        """Действующая запись каждого вида у волонтёра: та, что действует дольше (бессрочная —
+        дольше всех), при равенстве — внесённая позже. Остальные заменены ею."""
+        until = Coalesce("valid_until", Value(FOREVER))
+        later = (
+            VolunteerDocument.objects.filter(
+                is_archived=False,
+                volunteer=OuterRef("volunteer"),
+                document_type=OuterRef("document_type"),
+            )
+            .annotate(until=until)
+            .filter(
+                Q(until__gt=OuterRef("until"))
+                | Q(until=OuterRef("until"), created_at__gt=OuterRef("created_at"))
+            )
+        )
+        return self.filter(is_archived=False).annotate(until=until).exclude(Exists(later))
+
+
+class VolunteerDocument(BaseModel):
+    """Документ волонтёра со сроком действия (ФТ-В-09): медкнижка, справка об отсутствии
+    судимости. Новый документ того же вида заменяет прежний — напоминание о сроке
+    (ФТ-У-04) приходит только по последнему. Номер документа не хранится (НФТ-ПД-04)."""
+
+    volunteer = models.ForeignKey(Volunteer, on_delete=models.PROTECT, related_name="documents")
+    document_type = models.ForeignKey(
+        "core.VolunteerDocumentType", verbose_name="вид документа", on_delete=models.PROTECT
+    )
+    issued_on = models.DateField("дата выдачи", null=True, blank=True)
+    valid_until = models.DateField(
+        "действует до", null=True, blank=True, help_text="Пусто — бессрочно."
+    )
+    scan = models.ForeignKey(
+        "consents.Attachment",
+        verbose_name="скан",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="volunteer_documents",
+    )
+    comment = models.CharField("комментарий", max_length=300, blank=True)
+    # Срок, о котором уже напомнили: при новом сроке — новое напоминание
+    expiry_notice_for = models.DateField(null=True, blank=True, editable=False)
+
+    objects = VolunteerDocumentQuerySet.as_manager()  # type: ignore[misc]
+
+    class Meta:
+        verbose_name = "документ волонтёра"
+        verbose_name_plural = "документы волонтёров"
+        ordering = ["document_type__sort_order", "document_type__name", "-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(valid_until__isnull=True)
+                | Q(issued_on__isnull=True)
+                | Q(valid_until__gte=models.F("issued_on")),
+                name="volunteer_document_valid_after_issued",
+                violation_error_message="Срок действия заканчивается раньше даты выдачи.",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return str(self.document_type)
+
+    def state(self, *, current: bool, day: datetime.date | None = None) -> str:
+        """Состояние для карточки; current — не заменён ли документ новым того же вида."""
+        day = day or timezone.localdate()
+        if not current:
+            return "заменён"
+        if self.valid_until is not None and self.valid_until < day:
+            return "истёк"
+        if expires_soon(self.valid_until, day):
+            return "истекает"
+        return "действует"
 
 
 class VolunteerHours(BaseModel):

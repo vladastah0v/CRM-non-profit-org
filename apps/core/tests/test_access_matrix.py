@@ -30,7 +30,7 @@ from apps.beneficiaries.tests.conftest import (  # noqa: F401
     to_in_work,
 )
 from apps.consents.models import Consent
-from apps.core.models import AssistanceType, ShiftType
+from apps.core.models import AssistanceType, ShiftType, VolunteerDocumentType
 from apps.imports.models import ImportJob
 from apps.interactions.models import Interaction, Task
 from apps.notifications.models import NotificationKind
@@ -68,6 +68,9 @@ def world(make_user, make_volunteer, make_beneficiary, refs, brefs) -> dict[str,
     }
     volunteer = make_ready_for_activation(make_volunteer(), refs)
     volunteer_services.change_status(volunteer, "active")
+    volunteer_document = volunteer_services.add_document(
+        volunteer, document_type=VolunteerDocumentType.objects.get(name="Личная медицинская книжка")
+    )
     beneficiary = to_in_work(make_beneficiary(curator=users[OWNER]))
     beneficiary_services.save_sensitive(beneficiary, {"passport": "4500 123456"})
     person = beneficiary_services.add_related_person(
@@ -121,6 +124,7 @@ def world(make_user, make_volunteer, make_beneficiary, refs, brefs) -> dict[str,
         "users": users,
         "volunteer": volunteer,
         "volunteer_consent": Consent.objects.filter(volunteer=volunteer).first(),
+        "volunteer_document": volunteer_document,
         "beneficiary": beneficiary,
         "beneficiary_consent": Consent.objects.filter(beneficiary=beneficiary).first(),
         "person": person,
@@ -162,6 +166,13 @@ TABLE: list[tuple[str, Args, str, frozenset[str]]] = [
     ("volunteers:edit", V, "GET", VOLUNTEER_MANAGERS),
     ("volunteers:status", V, "GET", VOLUNTEER_MANAGERS),
     ("volunteers:training_add", V, "GET", VOLUNTEER_MANAGERS),
+    ("volunteers:document_add", V, "GET", VOLUNTEER_MANAGERS),
+    (
+        "volunteers:document_archive",
+        lambda w: [w["volunteer"].pk, w["volunteer_document"].pk],
+        "POST",
+        VOLUNTEER_MANAGERS,
+    ),
     ("volunteers:hours_add", V, "GET", VOLUNTEER_MANAGERS),
     ("volunteers:consent_add", V, "GET", VOLUNTEER_MANAGERS),
     (

@@ -140,6 +140,20 @@ CELERY_BEAT_SCHEDULE: dict[str, dict] = {
         "task": "interactions.send_task_reminders",
         "schedule": crontab(hour=8, minute=5),
     },
+    # ФТ-У-04: истекающие согласия и документы волонтёров — за 30 дней
+    "consent-expiry-reminders": {
+        "task": "consents.send_expiry_reminders",
+        "schedule": crontab(hour=8, minute=10),
+    },
+    "volunteer-document-reminders": {
+        "task": "volunteers.send_document_reminders",
+        "schedule": crontab(hour=8, minute=15),
+    },
+    # ФТ-У-05: волонтёры без смен больше 60 дней — сводка по понедельникам
+    "volunteers-idle-digest": {
+        "task": "volunteers.send_idle_digest",
+        "schedule": crontab(day_of_week="mon", hour=8, minute=20),
+    },
 }
 
 # ---------------------------------------------------------------------------

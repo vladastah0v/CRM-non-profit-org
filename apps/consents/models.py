@@ -16,8 +16,8 @@ from apps.core.models import ArchivableQuerySet, BaseModel
 class AttachmentQuerySet(ArchivableQuerySet):
     def visible_to(self, user: Any) -> Self:
         """Администратор видит все файлы, остальные — загруженные ими и файлы карточек,
-        к которым у них есть доступ: координатор — сканы согласий и фото волонтёров,
-        куратор — сканы согласий и документы своих подопечных."""
+        к которым у них есть доступ: координатор — сканы согласий, документов и фото
+        волонтёров, куратор — сканы согласий и документы своих подопечных."""
         if user_has_role(user, RoleCode.ADMIN):
             return self.all()
         if not getattr(user, "is_authenticated", False):
@@ -29,7 +29,14 @@ class AttachmentQuerySet(ArchivableQuerySet):
                 scan=OuterRef("pk"), volunteer__isnull=False
             )
             volunteer_photos = volunteer.objects.filter(photo=OuterRef("pk"))
-            condition |= Q(Exists(volunteer_consents)) | Q(Exists(volunteer_photos))
+            volunteer_documents = apps.get_model("volunteers", "VolunteerDocument").objects.filter(
+                scan=OuterRef("pk")
+            )
+            condition |= (
+                Q(Exists(volunteer_consents))
+                | Q(Exists(volunteer_photos))
+                | Q(Exists(volunteer_documents))
+            )
         if user_has_role(user, RoleCode.CURATOR):
             beneficiary = apps.get_model("beneficiaries", "Beneficiary")
             document = apps.get_model("beneficiaries", "BeneficiaryDocument")
@@ -157,10 +164,13 @@ class Consent(BaseModel):
     )
     revoked_on = models.DateField("дата отзыва", null=True, blank=True)
     revocation_note = models.CharField("комментарий к отзыву", max_length=500, blank=True)
+    # Срок, о котором уже напомнили (ФТ-У-04): при новом сроке — новое напоминание
+    expiry_notice_for = models.DateField(null=True, blank=True, editable=False)
 
     history = HistoricalRecords(
         history_id_field=models.UUIDField(default=uuid.uuid4),
         verbose_name="история согласия",
+        excluded_fields=["expiry_notice_for"],
     )
     objects = ConsentQuerySet.as_manager()  # type: ignore[misc]
 

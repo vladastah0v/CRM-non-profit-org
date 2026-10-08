@@ -1,6 +1,6 @@
 """Выдача всех данных человека по его запросу (НФТ-ПД-05, ст. 14 152-ФЗ).
 
-Одна книга Excel: лист на каждый вид данных — карточка, защищённый блок, согласия,
+Одна книга Excel: лист на каждый вид данных — карточка, защищённый блок, согласия, документы,
 связанные лица, заявки, помощь, смены и визиты, часы, взаимодействия, задачи, история
 статусов, файлы (только названия: сами файлы выдаются по ссылкам из карточки).
 Выгружает только администратор; событие — в журнал аудита (EXPORT и VIEW_SENSITIVE).
@@ -21,7 +21,15 @@ from .models import Consent
 
 # Служебные поля, которые не являются данными о человеке
 SKIP_FIELDS = frozenset(
-    {"id", "search_name", "bot_link_code", "bot_link_code_expires", "is_archived", "user"}
+    {
+        "id",
+        "search_name",
+        "bot_link_code",
+        "bot_link_code_expires",
+        "is_archived",
+        "user",
+        "expiry_notice_for",
+    }
 )
 
 
@@ -87,6 +95,12 @@ def volunteer_sheets(volunteer: Volunteer) -> list[Sheet]:
             CARD_LINKS,
         ),
         table_sheet(
+            "Документы",
+            volunteer.documents.select_related("document_type", "scan"),
+            volunteer.documents.model,
+            CARD_LINKS,
+        ),
+        table_sheet(
             "Часы вручную",
             volunteer.manual_hours.select_related("program"),
             volunteer.manual_hours.model,
@@ -135,7 +149,9 @@ def volunteer_sheets(volunteer: Volunteer) -> list[Sheet]:
     ]
     sheets.append(
         _files_sheet(
-            [c.scan for c in Consent.objects.filter(volunteer=volunteer)] + [volunteer.photo]
+            [c.scan for c in Consent.objects.filter(volunteer=volunteer)]
+            + [d.scan for d in volunteer.documents.select_related("scan")]
+            + [volunteer.photo]
         )
     )
     return sheets

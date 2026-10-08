@@ -28,6 +28,7 @@ from apps.core.models import (
     ShiftType,
     Skill,
     TrainingType,
+    VolunteerDocumentType,
 )
 from apps.shifts import services as shift_services
 from apps.volunteers import services as volunteer_services
@@ -88,6 +89,13 @@ class Command(BaseCommand):
         volunteer_services.add_training(volunteer, training_type=training, completed_on=today)
         for status in ("interview", "training", "active"):
             volunteer_services.change_status(volunteer, status)
+        # ФТ-В-09: медкнижка, срок которой истекает через 20 дней
+        volunteer_services.add_document(
+            volunteer,
+            document_type=VolunteerDocumentType.objects.get(name="Личная медицинская книжка"),
+            issued_on=today - datetime.timedelta(days=345),
+            valid_until=today + datetime.timedelta(days=20),
+        )
 
         beneficiary = beneficiary_services.create_beneficiary(
             {

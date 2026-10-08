@@ -17,6 +17,7 @@ from . import permissions
 from .filters import VolunteerFilter
 from .models import (
     Volunteer,
+    VolunteerDocument,
     VolunteerHours,
     VolunteerStatus,
     VolunteerStatusChange,
@@ -64,6 +65,12 @@ def get_managed_volunteer(user: Any, pk: Any) -> Volunteer:
 
 
 @dataclass
+class DocumentRow:
+    document: VolunteerDocument
+    state: str  # действует, истекает, истёк, заменён
+
+
+@dataclass
 class VolunteerCard:
     volunteer: Volunteer
     full: bool
@@ -76,6 +83,7 @@ class VolunteerCard:
     transitions: list[str]
     activation_problems: list[str]
     duplicates: list[DuplicateMatch] = field(default_factory=list)
+    documents: list[DocumentRow] = field(default_factory=list)
 
     @property
     def show_activation_hint(self) -> bool:
@@ -93,6 +101,13 @@ def volunteer_card(user: Any, volunteer: Volunteer) -> VolunteerCard:
         .select_related("scan")
     )
     trainings = list(volunteer.trainings.filter(is_archived=False).select_related("training_type"))
+    current = set(volunteer.documents.current().values_list("pk", flat=True))
+    documents = [
+        DocumentRow(document, document.state(current=document.pk in current))
+        for document in volunteer.documents.filter(is_archived=False).select_related(
+            "document_type", "scan"
+        )
+    ]
     hours = list(volunteer.manual_hours.filter(is_archived=False).select_related("program")[:50])
     changes = list(volunteer.status_changes.select_related("reason", "created_by")[:50])
     can_manage = permissions.can_manage(user)
@@ -108,4 +123,5 @@ def volunteer_card(user: Any, volunteer: Volunteer) -> VolunteerCard:
         transitions=allowed_transitions(volunteer) if not volunteer.is_archived else [],
         activation_problems=activation_problems(volunteer),
         duplicates=duplicates_of(volunteer) if volunteer.is_possible_duplicate else [],
+        documents=documents,
     )

@@ -18,6 +18,7 @@ from apps.beneficiaries.tests.conftest import to_in_work
 from apps.consents import anonymize
 from apps.consents.models import Attachment, Consent, ConsentKind
 from apps.consents.services import revoke_consent
+from apps.core.models import VolunteerDocumentType
 from apps.interactions.models import Interaction
 from apps.notifications.models import Notification, NotificationKind
 from apps.reports import services as reports
@@ -27,7 +28,7 @@ from apps.requests.tests.conftest import assistance_data
 from apps.shifts import services as shift_services
 from apps.shifts.models import AssignmentStatus
 from apps.volunteers import services as volunteer_services
-from apps.volunteers.models import Volunteer
+from apps.volunteers.models import Volunteer, VolunteerDocument
 from apps.volunteers.tests.conftest import give_consent as give_volunteer_consent
 
 pytestmark = pytest.mark.django_db
@@ -48,6 +49,13 @@ def test_fta04_volunteer_personal_data_erased_stats_kept(make_active, make_shift
     Volunteer.objects.filter(pk=volunteer.pk).update(telegram_id=4242)
     volunteer.refresh_from_db()
     scan_consent = give_volunteer_consent(volunteer, scan=pdf())
+    volunteer_services.add_document(
+        volunteer,
+        document_type=VolunteerDocumentType.objects.get(name="Личная медицинская книжка"),
+        valid_until=TODAY(),
+        scan=pdf("медкнижка.pdf"),
+        comment="Анна принесла оригинал",
+    )
     shift = make_shift(starts_in=-datetime.timedelta(days=2))
     assignment = shift_services.assign_to_shift(shift, volunteer)
     shift_services.change_assignment_status(assignment, AssignmentStatus.ATTENDED)
@@ -68,6 +76,7 @@ def test_fta04_volunteer_personal_data_erased_stats_kept(make_active, make_shift
     # Файлы удалены, согласие осталось как факт
     scan_consent.refresh_from_db()
     assert scan_consent.scan is None and not Attachment.objects.exists()
+    assert not VolunteerDocument.objects.filter(volunteer=volunteer).exists()
     # Копий ФИО в истории нет — только запись о самом обезличивании
     assert not Volunteer.history.filter(last_name=original).exists()
     assert Volunteer.history.filter(id=volunteer.pk).count() == 1

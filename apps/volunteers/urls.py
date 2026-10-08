@@ -11,6 +11,12 @@ urlpatterns = [
     path("<uuid:pk>/edit/", views.volunteer_edit, name="edit"),
     path("<uuid:pk>/status/", views.volunteer_status, name="status"),
     path("<uuid:pk>/trainings/add/", views.training_add, name="training_add"),
+    path("<uuid:pk>/documents/add/", views.document_add, name="document_add"),
+    path(
+        "<uuid:pk>/documents/<uuid:document_pk>/archive/",
+        views.document_archive,
+        name="document_archive",
+    ),
     path("<uuid:pk>/hours/add/", views.hours_add, name="hours_add"),
     path("<uuid:pk>/consents/add/", views.consent_add, name="consent_add"),
     path(

@@ -33,6 +33,7 @@ from apps.core.models import (
     Program,
     Skill,
     TrainingType,
+    VolunteerDocumentType,
     VolunteerSource,
 )
 from apps.core.normalize import normalize_email, normalize_name, normalize_phone
@@ -44,6 +45,7 @@ from apps.shifts.services import cancel_for_volunteer
 from .models import (
     Volunteer,
     VolunteerAvailability,
+    VolunteerDocument,
     VolunteerHours,
     VolunteerStatus,
     VolunteerStatusChange,
@@ -489,6 +491,53 @@ def add_manual_hours(
         AuditAction.CREATE, request=request, obj=record, extra={"volunteer": str(volunteer.pk)}
     )
     return record
+
+
+@transaction.atomic
+def add_document(
+    volunteer: Volunteer,
+    *,
+    document_type: VolunteerDocumentType,
+    issued_on: datetime.date | None = None,
+    valid_until: datetime.date | None = None,
+    scan: UploadedFile | None = None,
+    comment: str = "",
+    request: HttpRequest | None = None,
+) -> VolunteerDocument:
+    """ФТ-В-09: документ со сроком действия. Новый документ того же вида заменяет прежний."""
+    ensure_editable(volunteer)
+    if issued_on is not None:
+        _not_in_future(issued_on, "issued_on")
+        if valid_until is not None and valid_until < issued_on:
+            raise ValidationError({"valid_until": "Срок действия заканчивается раньше выдачи."})
+    document = VolunteerDocument(
+        volunteer=volunteer,
+        document_type=document_type,
+        issued_on=issued_on,
+        valid_until=valid_until,
+        comment=" ".join(comment.split()),
+    )
+    if scan is not None:
+        document.scan = store_attachment(scan)
+    document.save()
+    log_event(
+        AuditAction.CREATE, request=request, obj=document, extra={"volunteer": str(volunteer.pk)}
+    )
+    return document
+
+
+@transaction.atomic
+def archive_document(document: VolunteerDocument, *, request: HttpRequest | None = None) -> None:
+    """Ошибочная запись — в архив: напоминаний по ней больше не будет. Скан остаётся
+    (удаляется только обезличиванием)."""
+    ensure_editable(document.volunteer)
+    document.archive()
+    log_event(
+        AuditAction.ARCHIVE,
+        request=request,
+        obj=document,
+        extra={"volunteer": str(document.volunteer_id)},
+    )
 
 
 def manual_hours_total(volunteer: Volunteer) -> Decimal:

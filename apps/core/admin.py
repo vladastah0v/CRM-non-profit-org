@@ -14,6 +14,7 @@ from .models import (
     ShiftType,
     Skill,
     TrainingType,
+    VolunteerDocumentType,
     VolunteerSource,
 )
 
@@ -81,6 +82,11 @@ class DistrictAdmin(ReferenceAdmin):
 
 @admin.register(TrainingType)
 class TrainingTypeAdmin(ReferenceAdmin):
+    fields = ("name", "description", "sort_order", *ReferenceAdmin.readonly_fields)
+
+
+@admin.register(VolunteerDocumentType)
+class VolunteerDocumentTypeAdmin(ReferenceAdmin):
     fields = ("name", "description", "sort_order", *ReferenceAdmin.readonly_fields)
 
 

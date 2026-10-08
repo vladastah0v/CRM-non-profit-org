@@ -14,6 +14,7 @@ from apps.beneficiaries.models import Beneficiary
 from apps.beneficiaries.tests.conftest import give_consent, to_in_work
 from apps.consents import anonymize
 from apps.consents.models import ConsentKind
+from apps.core.models import VolunteerDocumentType
 from apps.notifications.models import Notification, NotificationKind
 from apps.volunteers import services as volunteer_services
 from apps.volunteers.models import Volunteer
@@ -57,6 +58,11 @@ def test_ftpd05_beneficiary_all_data_export(verified_client, make_user, make_ben
 
 def test_ftpd05_volunteer_export_admin_only(verified_client, make_user, make_active, coordinator):
     volunteer = make_active()
+    volunteer_services.add_document(
+        volunteer,
+        document_type=VolunteerDocumentType.objects.get(name="Справка об отсутствии судимости"),
+        valid_until=TODAY() + datetime.timedelta(days=90),
+    )
     url = reverse("consents:subject_export", args=["volunteer", volunteer.pk])
     assert verified_client(coordinator).get(url).status_code == 403
     response = verified_client(make_user("admin")).get(url)
@@ -65,6 +71,9 @@ def test_ftpd05_volunteer_export_admin_only(verified_client, make_user, make_act
     assert card["Фамилия"] == volunteer.last_name
     assert "Код" not in str(sheets)  # служебные коды привязки не выгружаются
     assert len(sheets["Обучение"]) == 2 and len(sheets["История статусов"]) == 5
+    header, row = sheets["Документы"]
+    assert "Действует до" in header and "Справка об отсутствии судимости" in row
+    assert "Expiry notice for" not in str(sheets)  # служебная отметка о напоминании
 
 
 def test_ftpd06_expired_records_anonymized_monthly(
