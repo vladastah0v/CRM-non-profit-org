@@ -27,6 +27,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "S105", "S106"]
 "conftest.py" = ["S105"]
+"e2e/**" = ["S101"]
+"scripts/load/**" = ["S311"]  # случайные запросы нагрузки, не криптография
 "config/settings/*.py" = ["F405", "F403"]
 
 [tool.ruff.lint.isort]
@@ -39,7 +41,7 @@ check_untyped_defs = true
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
-exclude = ["migrations/", "tmp/"]
+exclude = ["migrations/", "tmp/", "e2e/"]  # e2e — свой контейнер с Playwright
 
 [tool.django-stubs]
 django_settings_module = "config.settings.test"

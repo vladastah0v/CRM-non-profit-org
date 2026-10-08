@@ -38,6 +38,20 @@ services:
     volumes:
       - source:/var/lib/postgresql/data
 
+  # Как на сервере (docker-compose.prod.yml): отдельный контейнер, база — по сети,
+  # том данных — только для чтения
+  backup:
+    image: crm-db:16-walg
+    profiles: [backup]
+    environment:
+      <<: *walg
+      PGHOST: db
+      PGUSER: postgres
+      PGPASSWORD: restore-test
+      PGDATABASE: postgres
+    volumes:
+      - source:/var/lib/postgresql/data:ro
+
   # Чистый «новый сервер»: пустой том, тот же образ и ключи
   restored:
     image: crm-db:16-walg

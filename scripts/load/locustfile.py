@@ -16,7 +16,8 @@ import re
 
 from locust import HttpUser, between, task
 
-SESSIONS = json.load(open(os.environ.get("LOAD_SESSIONS", "/mnt/out/load-sessions.json")))
+with open(os.environ.get("LOAD_SESSIONS", "/mnt/out/load-sessions.json")) as f:
+    SESSIONS = json.load(f)
 BY_ROLE: dict[str, itertools.cycle] = {}
 for role in {s["role"] for s in SESSIONS}:
     BY_ROLE[role] = itertools.cycle([s["cookie"] for s in SESSIONS if s["role"] == role])
@@ -56,10 +57,7 @@ class Staff(HttpUser):
             self.client.get(random.choice(self.cards[kind]), name=f"карточка: {kind}")
 
     def search(self) -> None:
-        if random.random() < 0.5:
-            query = random.choice(NAMES)
-        else:
-            query = f"{random.randrange(1000, 9999)}"
+        query = random.choice(NAMES) if random.random() < 0.5 else str(random.randrange(1000, 9999))
         self.client.get(f"/search/?q={query}", name="поиск")
 
 
@@ -124,7 +122,8 @@ class Analyst(Staff):
         today = datetime.date.today()
         start = today - datetime.timedelta(days=365)
         self.client.get(
-            f"/reports/volunteers/?date_from={start}&date_to={today}", name="отчёт по волонтёрам за год"
+            f"/reports/volunteers/?date_from={start}&date_to={today}",
+            name="отчёт по волонтёрам за год",
         )
 
 

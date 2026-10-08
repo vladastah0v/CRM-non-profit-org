@@ -68,7 +68,7 @@ class Command(BaseCommand):
         parser.add_argument("--beneficiaries", type=int, default=20_000)
         parser.add_argument("--assistance", type=int, default=500_000)
         parser.add_argument("--curators", type=int, default=30)
-        parser.add_argument("--sessions", type=Path, default=Path("/tmp/load-sessions.json"))
+        parser.add_argument("--sessions", type=Path, default=Path("tmp/load-sessions.json"))
         parser.add_argument("--seed", type=int, default=2026)
 
     def handle(self, *args: Any, **options: Any) -> None:
@@ -108,7 +108,9 @@ class Command(BaseCommand):
             "skills": make(Skill, ["Вождение", "Первая помощь", "Готовка", "Ремонт", "Педагогика"]),
             "districts": make(District, [f"Район {i}" for i in range(1, 13)]),
             "programs": make(Program, ["Тёплый дом", "Продукты", "Здоровье", "Дети", "Старшие"]),
-            "categories": make(BeneficiaryCategory, ["Пожилые", "Семьи", "Инвалидность", "Бездомные"]),
+            "categories": make(
+                BeneficiaryCategory, ["Пожилые", "Семьи", "Инвалидность", "Бездомные"]
+            ),
             "types": make(
                 AssistanceType, ["Продуктовый набор", "Лекарства", "Одежда", "Денежная помощь"]
             ),
@@ -123,7 +125,10 @@ class Command(BaseCommand):
             users = []
             for i in range(count):
                 user = User.objects.create_user(
-                    username=f"load-{code}-{i}", password=None, last_name="Нагрузкин", first_name=code
+                    username=f"load-{code}-{i}",
+                    password=None,
+                    last_name="Нагрузкин",
+                    first_name=code,
                 )
                 UserRole.objects.create(user=user, role=roles[code])
                 SecureTOTPDevice.objects.create(user=user, name="load", confirmed=True)
@@ -145,15 +150,20 @@ class Command(BaseCommand):
             started = today - datetime.timedelta(days=rng.randrange(3 * 365))
             rows.append(
                 Volunteer(
-                    last_name=last, first_name=first, middle_name=middle,
-                    birth_date=datetime.date(1960 + rng.randrange(45), 1 + rng.randrange(12), 1 + rng.randrange(28)),
-                    phone=f"+7916{i:07d}", district=rng.choice(refs["districts"]),
+                    last_name=last,
+                    first_name=first,
+                    middle_name=middle,
+                    birth_date=datetime.date(
+                        1960 + rng.randrange(45), 1 + rng.randrange(12), 1 + rng.randrange(28)
+                    ),
+                    phone=f"+7916{i:07d}",
+                    district=rng.choice(refs["districts"]),
                     status=status,
                     start_date=None if status == VolunteerStatus.APPLICATION else started,
                     leaving_reason=reason if status == VolunteerStatus.LEFT else None,
                     left_on=today if status == VolunteerStatus.LEFT else None,
                     search_name=normalize_name(last, first, middle),
-                )  # fmt: skip
+                )
             )
         volunteers = Volunteer.objects.bulk_create(rows, batch_size=BATCH)
         through = Volunteer.skills.through
@@ -177,15 +187,21 @@ class Command(BaseCommand):
             status = rng.choice(statuses)
             rows.append(
                 Beneficiary(
-                    last_name=last, first_name=first, middle_name=middle,
-                    birth_date=datetime.date(1930 + rng.randrange(80), 1 + rng.randrange(12), 1 + rng.randrange(28)),
-                    phone=f"+7903{i:07d}", address=f"Москва, ул. Тестовая, д. {i % 300}",
-                    category=rng.choice(refs["categories"]), curator=rng.choice(staff["curator"]),
+                    last_name=last,
+                    first_name=first,
+                    middle_name=middle,
+                    birth_date=datetime.date(
+                        1930 + rng.randrange(80), 1 + rng.randrange(12), 1 + rng.randrange(28)
+                    ),
+                    phone=f"+7903{i:07d}",
+                    address=f"Москва, ул. Тестовая, д. {i % 300}",
+                    category=rng.choice(refs["categories"]),
+                    curator=rng.choice(staff["curator"]),
                     status=status,
                     closed_on=timezone.localdate() if status == CaseStatus.CLOSED else None,
                     outcome="Помощь оказана" if status == CaseStatus.CLOSED else "",
                     search_name=normalize_name(last, first, middle),
-                )  # fmt: skip
+                )
             )
         # У закрытого случая в базе обязательна причина
         reason = None
@@ -210,11 +226,15 @@ class Command(BaseCommand):
         requests = HelpRequest.objects.bulk_create(
             [
                 HelpRequest(
-                    beneficiary=b, assistance_type=rng.choice(refs["types"]),
-                    description="Нужна помощь", responsible=b.curator,
-                    status=rng.choice([RequestStatus.NEW, RequestStatus.IN_WORK, RequestStatus.DONE]),
+                    beneficiary=b,
+                    assistance_type=rng.choice(refs["types"]),
+                    description="Нужна помощь",
+                    responsible=b.curator,
+                    status=rng.choice(
+                        [RequestStatus.NEW, RequestStatus.IN_WORK, RequestStatus.DONE]
+                    ),
                     due_date=today + datetime.timedelta(days=rng.randrange(-30, 60)),
-                )  # fmt: skip
+                )
                 for b in beneficiaries
                 if rng.random() < 0.5
             ],
@@ -231,18 +251,22 @@ class Command(BaseCommand):
                 money = kind.name == "Денежная помощь"
                 batch.append(
                     Assistance(
-                        beneficiary=b, assistance_type=kind,
+                        beneficiary=b,
+                        assistance_type=kind,
                         provided_on=today - datetime.timedelta(days=rng.randrange(3 * 365)),
                         quantity=None if money else Decimal(1 + rng.randrange(5)),
                         amount=Decimal(500 + rng.randrange(5000)) if money else None,
-                        program=rng.choice(refs["programs"]), executor_user=b.curator,
-                    )  # fmt: skip
+                        program=rng.choice(refs["programs"]),
+                        executor_user=b.curator,
+                    )
                 )
             Assistance.objects.bulk_create(batch, batch_size=BATCH)
             made += size
             self.stdout.write(f"Помощь: {made}")
 
-    def _shifts(self, rng: random.Random, volunteers: list[Volunteer], refs: dict[str, Any]) -> None:
+    def _shifts(
+        self, rng: random.Random, volunteers: list[Volunteer], refs: dict[str, Any]
+    ) -> None:
         now = timezone.now()
         starts = [
             now + datetime.timedelta(days=rng.randrange(-365, 60), hours=rng.randrange(8))
@@ -251,11 +275,14 @@ class Command(BaseCommand):
         shifts = Shift.objects.bulk_create(
             [
                 Shift(
-                    title=f"Смена {i}", shift_type=rng.choice(refs["shift_types"]),
-                    starts_at=start, ends_at=start + datetime.timedelta(hours=4),
-                    address="Склад фонда", volunteers_needed=5,
+                    title=f"Смена {i}",
+                    shift_type=rng.choice(refs["shift_types"]),
+                    starts_at=start,
+                    ends_at=start + datetime.timedelta(hours=4),
+                    address="Склад фонда",
+                    volunteers_needed=5,
                     program=rng.choice(refs["programs"]),
-                )  # fmt: skip
+                )
                 for i, start in enumerate(starts)
             ],
             batch_size=BATCH,
@@ -267,10 +294,12 @@ class Command(BaseCommand):
                 past = shift.ends_at < now
                 rows.append(
                     Assignment(
-                        kind=AssignmentKind.SHIFT, shift=shift, volunteer=volunteer,
+                        kind=AssignmentKind.SHIFT,
+                        shift=shift,
+                        volunteer=volunteer,
                         status=AssignmentStatus.ATTENDED if past else AssignmentStatus.ASSIGNED,
                         hours=Decimal(4) if past else None,
-                    )  # fmt: skip
+                    )
                 )
         Assignment.objects.bulk_create(rows, batch_size=BATCH)
 

@@ -18,7 +18,7 @@ wait_ready() {
     return 1
 }
 
-$P --profile restore down -v >/dev/null 2>&1 || true
+$P --profile backup --profile restore down -v >/dev/null 2>&1 || true
 log "S3 и база-источник"
 $P up -d s3 >/dev/null
 sleep 10
@@ -28,7 +28,7 @@ wait_ready db
 log "данные: $ROWS строк"
 sql db "CREATE TABLE facts AS SELECT g AS id, md5(g::text) AS txt FROM generate_series(1, $ROWS) g" >/dev/null
 log "полная копия"
-$P exec -T db crm-backup now
+$P --profile backup run --rm -T --no-deps backup crm-backup now
 
 log "запись после копии (должна вернуться из WAL)"
 sql db "INSERT INTO facts SELECT g, 'after-backup' FROM generate_series($ROWS + 1, $ROWS + 1000) g" >/dev/null
@@ -50,7 +50,7 @@ SECONDS_TOOK=$(( $(date +%s) - START ))
 ACTUAL="$(sql restored "SELECT count(*) || ':' || sum(id) FROM facts")"
 log "восстановлено: $ACTUAL за ${SECONDS_TOOK} с"
 
-$P --profile restore down -v >/dev/null 2>&1 || true
+$P --profile backup --profile restore down -v >/dev/null 2>&1 || true
 if [ "$EXPECTED" = "$ACTUAL" ]; then
     log "УСПЕХ: данные совпадают, включая записи после копии; время восстановления ${SECONDS_TOOK} с"
 else

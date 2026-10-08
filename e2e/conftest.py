@@ -67,6 +67,4 @@ def shot(page: Page, name: str) -> None:
 
 
 def no_horizontal_scroll(page: Page) -> bool:
-    return bool(
-        page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
-    )
+    return bool(page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"))
