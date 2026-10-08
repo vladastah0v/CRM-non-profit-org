@@ -1,20 +1,77 @@
-# Рабочий сервер: Gunicorn, Nginx с TLS (НФТ-ИБ-01), автопродление сертификата.
-# Порты PostgreSQL и Redis наружу не публикуются (НФТ-ИБ-09).
+# Рабочий сервер: Gunicorn, Nginx с TLS (НФТ-ИБ-01), автопродление сертификата,
+# резервные копии WAL-G (п. 5.4). Порты PostgreSQL и Redis наружу не публикуются (НФТ-ИБ-09).
+# Развёртывание и восстановление — docs/deploy.md.
+
+# Копии — в S3-хранилище в РФ в другом дата-центре, зашифрованы (НФТ-ПД-01, НФТ-ИБ-06)
+x-walg: &walg
+  TZ: ${TIME_ZONE:-Europe/Moscow}
+  WALG_S3_PREFIX: ${BACKUP_S3_PREFIX:?Задайте BACKUP_S3_PREFIX в .env}
+  AWS_ENDPOINT: ${BACKUP_S3_ENDPOINT:-https://storage.yandexcloud.net}
+  AWS_REGION: ${BACKUP_S3_REGION:-ru-central1}
+  AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY:?Задайте BACKUP_S3_ACCESS_KEY в .env}
+  AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY:?Задайте BACKUP_S3_SECRET_KEY в .env}
+  AWS_S3_FORCE_PATH_STYLE: "true"
+  WALG_LIBSODIUM_KEY: ${BACKUP_ENCRYPTION_KEY:?Задайте BACKUP_ENCRYPTION_KEY в .env}
+  WALG_LIBSODIUM_KEY_TRANSFORM: hex
+  WALG_COMPRESSION_METHOD: brotli
 
 services:
+  db:
+    build: docker/postgres
+    image: crm-db:16-walg
+    environment:
+      <<: *walg
+      # Роль приложения без права менять схему и журнал аудита (docker/postgres/init)
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Задайте POSTGRES_APP_PASSWORD в .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    # Архив WAL не реже раза в 5 минут: потеря данных при сбое — не больше 15 минут (п. 5.4)
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=wal-g wal-push %p
+      - -c
+      - archive_timeout=300
+
+  backup:
+    image: crm-db:16-walg
+    entrypoint: ["crm-backup", "loop"]
+    environment:
+      <<: *walg
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-crm}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-crm}
+      BACKUP_TIME: ${BACKUP_TIME:-02:30}
+      BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:-}
+    volumes:
+      - pgdata:/var/lib/postgresql/data:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   web:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       DJANGO_MIGRATE: "1"
       DJANGO_COLLECTSTATIC: "1"
+      # Миграции — от роли-владельца, работа — от роли приложения (docs/deploy.md)
+      DATABASE_URL: ${APP_DATABASE_URL:?Задайте APP_DATABASE_URL в .env}
+      MIGRATE_DATABASE_URL: ${DATABASE_URL}
 
   celery:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
+      DATABASE_URL: ${APP_DATABASE_URL}
 
   beat:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
+      DATABASE_URL: ${APP_DATABASE_URL}
 
   nginx:
     environment:

@@ -23,6 +23,7 @@ class NotificationKind(models.TextChoices):
     TASK_DUE = "task_due", "Срок задачи"
     ASSIGNMENT_DECLINED = "assignment_declined", "Волонтёр отказался от смены или визита"
     IMPORT_FINISHED = "import_finished", "Импорт данных"
+    RETENTION_REPORT = "retention_report", "Обезличивание по сроку хранения"
 
 
 class NotificationQuerySet(ArchivableQuerySet):

@@ -3,7 +3,7 @@
   <section class="card mt-4" aria-labelledby="visits-title">
     <div class="mb-3 flex items-center justify-between gap-2">
       <h2 id="visits-title">Визиты волонтёров</h2>
-      {% if visits.can_assign %}<a href="{% url 'shifts:visit_create' b.pk %}" class="text-sm">+ Назначить визит</a>{% endif %}
+      {% if visits.can_assign %}<a href="{% url 'shifts:visit_create' b.pk %}" class="shrink-0 whitespace-nowrap text-sm">+ Назначить визит</a>{% endif %}
     </div>
     {% if visits.upcoming or visits.recent %}
       <ul class="divide-y divide-slate-100 text-sm">

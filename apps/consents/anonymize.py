@@ -20,26 +20,37 @@ from __future__ import annotations
 import datetime
 from typing import Any
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest
+from django.urls import reverse
 from django.utils import timezone
 
+from apps.accounts.roles import RoleCode
 from apps.audit.models import AuditAction
 from apps.audit.services import log_event
 from apps.beneficiaries.models import (
     Beneficiary,
     BeneficiaryDocument,
     BeneficiarySensitive,
+    CaseStatus,
     CaseStatusChange,
     RelatedPerson,
 )
 from apps.interactions.models import Interaction, Task
+from apps.notifications.models import NotificationKind
+from apps.notifications.services import notify, users_with_role
 from apps.requests.models import Assistance, HelpRequest, RequestStatusChange
 from apps.shifts.models import Assignment, AssignmentStatusChange
 from apps.shifts.services import cancel_for_beneficiary, cancel_for_volunteer
-from apps.volunteers.models import Volunteer, VolunteerHours, VolunteerStatusChange
+from apps.volunteers.models import (
+    Volunteer,
+    VolunteerHours,
+    VolunteerStatus,
+    VolunteerStatusChange,
+)
 
 from .files import delete_attachment
 from .models import Attachment, Consent
@@ -124,6 +135,7 @@ def anonymize_volunteer(
 ) -> Volunteer:
     document = _check(volunteer, basis, document)
     volunteer = Volunteer.objects.select_for_update().get(pk=volunteer.pk)
+    _check(volunteer, basis, document)  # повторно — под блокировкой: два запроса одновременно
     now = timezone.now()
     cancel_for_volunteer(volunteer, comment="Данные волонтёра обезличены")
 
@@ -164,6 +176,7 @@ def anonymize_beneficiary(
 ) -> Beneficiary:
     document = _check(beneficiary, basis, document)
     beneficiary = Beneficiary.objects.select_for_update().get(pk=beneficiary.pk)
+    _check(beneficiary, basis, document)  # повторно — под блокировкой
     now = timezone.now()
     cancel_for_beneficiary(beneficiary, comment="Данные подопечного обезличены")
 
@@ -172,7 +185,8 @@ def anonymize_beneficiary(
     beneficiary.birth_date = datetime.date(beneficiary.birth_date.year, 1, 1)
     beneficiary.address = ""
     beneficiary.phone = ""
-    beneficiary.outcome = ""
+    # У закрытого случая итог обязателен (ограничение в базе) — текст заменяется
+    beneficiary.outcome = ERASED_TEXT if beneficiary.outcome else ""
 
     # Защищённый блок (здоровье, инвалидность, документы) — удаляется целиком
     BeneficiarySensitive.objects.filter(beneficiary=beneficiary).delete()
@@ -237,3 +251,59 @@ def pending_requests() -> list[Person]:
         *Beneficiary.objects.filter(pending),
     ]
     return sorted(people, key=lambda p: (p.erasure_requested_on, p.last_name))
+
+
+# ---------------------------------------------------------------------------
+# Срок хранения (НФТ-ПД-06, п. 10.2): ежемесячно, автоматически, с отчётом администратору
+# ---------------------------------------------------------------------------
+def expired(today: datetime.date | None = None) -> tuple[list[Volunteer], list[Beneficiary]]:
+    """Выбывшие волонтёры и закрытые случаи, у которых истёк срок хранения."""
+    days = settings.PD_RETENTION_DAYS
+    if days <= 0:
+        return [], []
+    cutoff = (today or timezone.localdate()) - datetime.timedelta(days=days)
+    volunteers = Volunteer.objects.filter(
+        status=VolunteerStatus.LEFT, left_on__lt=cutoff, anonymized_at__isnull=True
+    )
+    beneficiaries = Beneficiary.objects.filter(
+        status=CaseStatus.CLOSED, closed_on__lt=cutoff, anonymized_at__isnull=True
+    )
+    return list(volunteers), list(beneficiaries)
+
+
+def anonymize_expired(today: datetime.date | None = None) -> dict[str, int]:
+    days = settings.PD_RETENTION_DAYS
+    admins = users_with_role(RoleCode.ADMIN)
+    if days <= 0:
+        notify(
+            admins,
+            NotificationKind.RETENTION_REPORT,
+            "Срок хранения данных не настроен",
+            body="Данные выбывших волонтёров и закрытых случаев не обезличиваются "
+            "автоматически: утвердите срок и задайте PD_RETENTION_DAYS (НФТ-ПД-06).",
+        )
+        return {"volunteers": 0, "beneficiaries": 0, "errors": 0}
+    volunteers, beneficiaries = expired(today)
+    document = f"Истёк срок хранения ({days} дн.)"
+    done = {"volunteers": 0, "beneficiaries": 0, "errors": 0}
+    for volunteer in volunteers:
+        try:
+            anonymize_volunteer(volunteer, basis="retention", document=document)
+            done["volunteers"] += 1
+        except ValidationError:
+            done["errors"] += 1
+    for beneficiary in beneficiaries:
+        try:
+            anonymize_beneficiary(beneficiary, basis="retention", document=document)
+            done["beneficiaries"] += 1
+        except ValidationError:
+            done["errors"] += 1
+    notify(
+        admins,
+        NotificationKind.RETENTION_REPORT,
+        "Обезличивание по сроку хранения",
+        body=f"Обезличено: волонтёров — {done['volunteers']}, подопечных — "
+        f"{done['beneficiaries']}. Ошибок: {done['errors']}.",
+        url=reverse("consents:erasure_list"),
+    )
+    return done

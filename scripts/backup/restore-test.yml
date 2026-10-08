@@ -1,0 +1,51 @@
+# Тест восстановления из копии (п. 5.4, 9.2 ТЗ): изолированный проект Compose, никаких
+# рабочих данных. S3Mock — вместо S3-хранилища в РФ. Запуск: sh scripts/backup/restore-test.sh
+
+x-walg: &walg
+  POSTGRES_PASSWORD: restore-test
+  TZ: Europe/Moscow
+  WALG_S3_PREFIX: s3://backups/crm
+  AWS_ACCESS_KEY_ID: restore-test
+  AWS_SECRET_ACCESS_KEY: restore-test-secret
+  AWS_ENDPOINT: http://s3:9090
+  AWS_REGION: ru-central1
+  AWS_S3_FORCE_PATH_STYLE: "true"
+  # Шифрование копий (НФТ-ИБ-06); на сервере — свой ключ из .env
+  WALG_LIBSODIUM_KEY: ec2a80ccc92ea3267bfb983f7e8899b0c123ee31ba22632fe118c94e496ca0d3
+  WALG_LIBSODIUM_KEY_TRANSFORM: hex
+  WALG_COMPRESSION_METHOD: brotli
+
+services:
+  # S3-совместимое хранилище для теста (вместо S3 в РФ на сервере)
+  s3:
+    image: adobe/s3mock:latest
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: backups
+      initialBuckets: backups
+
+  db:
+    build: ../../docker/postgres
+    image: crm-db:16-walg
+    environment: *walg
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=wal-g wal-push %p
+      - -c
+      - archive_timeout=60
+    volumes:
+      - source:/var/lib/postgresql/data
+
+  # Чистый «новый сервер»: пустой том, тот же образ и ключи
+  restored:
+    image: crm-db:16-walg
+    profiles: [restore]
+    environment: *walg
+    volumes:
+      - target:/var/lib/postgresql/data
+
+volumes:
+  source:
+  target:

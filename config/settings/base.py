@@ -130,6 +130,11 @@ CELERY_BEAT_SCHEDULE: dict[str, dict] = {
         "task": "shifts.send_reminders",
         "schedule": crontab(minute="*/10"),
     },
+    # НФТ-ПД-06, п. 10.2: обезличивание по сроку хранения — 1-го числа, ночью
+    "retention-anonymization": {
+        "task": "consents.anonymize_expired",
+        "schedule": crontab(day_of_month="1", hour=3, minute=0),
+    },
     "task-reminders": {
         "task": "interactions.send_task_reminders",
         "schedule": crontab(hour=8, minute=5),
@@ -240,7 +245,8 @@ X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
-CSRF_COOKIE_HTTPONLY = False  # HTMX читает токен из шаблона, не из cookie
+# HTMX берёт токен из <meta name="csrf-token">, а не из cookie — скрипты её не читают
+CSRF_COOKIE_HTTPONLY = True
 CSRF_FAILURE_VIEW = "apps.core.views.csrf_failure"
 # Брать IP клиента из X-Real-IP (его ставит Nginx). Включать только за доверенным прокси.
 TRUST_X_REAL_IP = env.bool("TRUST_X_REAL_IP", default=False)
@@ -268,6 +274,11 @@ REST_FRAMEWORK = {
 # Пусто — приём анкет выключен.
 # Сгенерировать: python -c "import secrets; print(secrets.token_hex(32))"
 INTAKE_HMAC_SECRET = env("INTAKE_HMAC_SECRET", default="")
+
+# Срок хранения данных выбывших волонтёров и закрытых случаев (НФТ-ПД-06), в днях.
+# Утверждает фонд; после него данные обезличиваются автоматически раз в месяц.
+# 0 — автоматическое обезличивание выключено (администраторы получают напоминание).
+PD_RETENTION_DAYS = env.int("PD_RETENTION_DAYS", default=0)
 
 # Telegram-бот волонтёров (п. 7.2). Токен от @BotFather: Celery отправляет напоминания,
 # бот (отдельный процесс, bot/) принимает ответы. Пусто — сообщения в Telegram не отправляются.

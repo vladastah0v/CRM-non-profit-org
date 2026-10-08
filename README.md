@@ -132,10 +132,35 @@ docs/              архитектура и решения
 
 Правила разработки — в [docs/development.md](docs/development.md).
 
+## Проверки перед релизом (раздел 9.1 ТЗ)
+
+При запущенном `docker compose up`, из корня репозитория:
+
+```bash
+sh scripts/e2e/run.sh              # сквозные тесты в браузере (Playwright), снимки 360 px — tmp/e2e/
+sh scripts/load/run.sh             # нагрузка: расчётный объём, 50 пользователей (Locust)
+sh scripts/security/zap.sh         # OWASP ZAP, отчёт — tmp/zap-report.html
+sh scripts/backup/restore-test.sh  # тест восстановления из копии (раз в квартал)
+```
+
+Каждый скрипт работает на своей базе (`crm_e2e`, `crm_load`) или в изолированном проекте —
+данные разработки не трогает. Последние результаты — [docs/acceptance/security-and-tests.md](docs/acceptance/security-and-tests.md).
+
 ## Рабочий сервер
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-Подробная инструкция по развёртыванию и восстановлению появится на этапе 9 (см. ТЗ, раздел 8).
+Развёртывание с нуля, резервные копии, восстановление, выпуск обновлений и ротация
+ключей — [docs/deploy.md](docs/deploy.md). Перенос данных из таблиц —
+[docs/data-migration.md](docs/data-migration.md).
+
+## Документация
+
+| Для кого | Документ |
+|---|---|
+| Сотрудники фонда | [Руководство пользователя по ролям](docs/user-guide/README.md) |
+| Администратор фонда | [Руководство администратора](docs/user-guide/admin.md), [бот](docs/bot.md) |
+| Приёмка | [Протокол сценариев](docs/acceptance/protocol.md), [акт](docs/acceptance/act.md), [тесты и безопасность](docs/acceptance/security-and-tests.md) |
+| Разработчики | [Правила](docs/development.md), [безопасность](docs/security.md), [отчёты](docs/reports.md), [API анкет](docs/intake-api.md), API — `/api/v1/docs/` |

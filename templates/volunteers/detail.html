@@ -31,7 +31,10 @@
             <button type="submit" class="btn btn-primary">Вернуть из архива</button>
           </form>
         {% endif %}
-        {% if is_admin and not v.anonymized_at %}<a href="{% url 'consents:anonymize' 'volunteer' v.pk %}" class="btn btn-secondary">Обезличить</a>{% endif %}
+        {% if is_admin and not v.anonymized_at %}
+          <a href="{% url 'consents:subject_export' 'volunteer' v.pk %}" class="btn btn-secondary" title="По запросу человека: все его данные одним файлом">Все данные (Excel)</a>
+          <a href="{% url 'consents:anonymize' 'volunteer' v.pk %}" class="btn btn-secondary">Обезличить</a>
+        {% endif %}
       </div>
     {% endif %}
   </div>
@@ -129,7 +132,7 @@
       <section class="card" aria-labelledby="hours-title">
         <div class="mb-3 flex items-center justify-between gap-2">
           <h2 id="hours-title">Часы</h2>
-          {% if card.can_manage and not v.is_archived %}<a href="{% url 'volunteers:hours_add' v.pk %}" class="text-sm">+ Добавить</a>{% endif %}
+          {% if card.can_manage and not v.is_archived %}<a href="{% url 'volunteers:hours_add' v.pk %}" class="shrink-0 whitespace-nowrap text-sm">+ Добавить</a>{% endif %}
         </div>
         <p class="text-3xl font-semibold">{{ card.total_hours|floatformat:"-2" }}</p>
         <p class="form-help">Всего отработано{% if shifts %}, из них по сменам и визитам — {{ shifts.hours|floatformat:"-2" }}: считаются автоматически по отметкам явки{% endif %}. Ниже — внесённые вручную.</p>
@@ -158,7 +161,7 @@
     <section class="card mt-4" aria-labelledby="consents-title">
       <div class="mb-3 flex items-center justify-between gap-2">
         <h2 id="consents-title">Согласия на обработку данных</h2>
-        {% if card.can_manage and not v.is_archived %}<a href="{% url 'volunteers:consent_add' v.pk %}" class="text-sm">+ Добавить</a>{% endif %}
+        {% if card.can_manage and not v.is_archived %}<a href="{% url 'volunteers:consent_add' v.pk %}" class="shrink-0 whitespace-nowrap text-sm">+ Добавить</a>{% endif %}
       </div>
       {% if card.consents %}
         <div class="overflow-x-auto">
@@ -194,7 +197,7 @@
       <section class="card" aria-labelledby="trainings-title">
         <div class="mb-3 flex items-center justify-between gap-2">
           <h2 id="trainings-title">Обучение и инструктажи</h2>
-          {% if card.can_manage and not v.is_archived %}<a href="{% url 'volunteers:training_add' v.pk %}" class="text-sm">+ Добавить</a>{% endif %}
+          {% if card.can_manage and not v.is_archived %}<a href="{% url 'volunteers:training_add' v.pk %}" class="shrink-0 whitespace-nowrap text-sm">+ Добавить</a>{% endif %}
         </div>
         {% if card.trainings %}
           <ul class="divide-y divide-slate-100 text-sm">

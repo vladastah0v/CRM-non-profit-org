@@ -64,7 +64,7 @@ def test_cards_outside_role_are_closed(
     coordinator = verified_client(make_user("coordinator"))
     assert coordinator.get(add_url("add", "beneficiary", b)).status_code == 403
     analyst = verified_client(make_user("analyst"))
-    assert analyst.get(add_url("add", "volunteer", v)).status_code == 404
+    assert analyst.get(add_url("add", "volunteer", v)).status_code == 403  # отказ до поиска
     assert (
         verified_client(curator)
         .get(reverse("interactions:add", args=["unknown", b.pk]))

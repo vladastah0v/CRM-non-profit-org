@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
+from django.db import transaction
 from django.http import HttpRequest
 from django.utils import timezone
 
@@ -79,6 +80,7 @@ def create_beneficiary_consent(beneficiary: Beneficiary, **fields: Any) -> Conse
     return create_consent(beneficiary=beneficiary, **fields)
 
 
+@transaction.atomic
 def revoke_consent(
     consent: Consent,
     *,
@@ -90,6 +92,12 @@ def revoke_consent(
     осталось — создаётся запрос на обезличивание со сроком 30 дней, администраторы
     получают уведомление. Обезличивает администратор (ФТ-А-04, apps/consents/anonymize.py).
     """
+    # Сначала — строка карточки человека, потом согласие: тот же порядок блокировок, что
+    # у обезличивания, иначе одновременные отзыв и обезличивание взаимно блокируются
+    person: Any = consent.volunteer or consent.beneficiary
+    if person is not None:
+        type(person).objects.select_for_update().filter(pk=person.pk).first()
+    consent.refresh_from_db()
     if consent.revoked_on is not None:
         raise ValidationError("Согласие уже отозвано.")
     if revoked_on < consent.signed_on:

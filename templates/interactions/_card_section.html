@@ -4,7 +4,7 @@
   <section class="card" aria-labelledby="interactions-title">
     <div class="mb-3 flex items-center justify-between gap-2">
       <h2 id="interactions-title">Взаимодействия</h2>
-      {% if not card.is_archived %}<a href="{% url 'interactions:add' activity.kind card.pk %}" class="text-sm">+ Записать</a>{% endif %}
+      {% if not card.is_archived %}<a href="{% url 'interactions:add' activity.kind card.pk %}" class="shrink-0 whitespace-nowrap text-sm">+ Записать</a>{% endif %}
     </div>
     {% if activity.interactions %}
       <ul class="divide-y divide-slate-100 text-sm">
@@ -32,7 +32,7 @@
   <section class="card" aria-labelledby="tasks-title">
     <div class="mb-3 flex items-center justify-between gap-2">
       <h2 id="tasks-title">Задачи</h2>
-      {% if not card.is_archived %}<a href="{% url 'interactions:task_add' activity.kind card.pk %}" class="text-sm">+ Поставить</a>{% endif %}
+      {% if not card.is_archived %}<a href="{% url 'interactions:task_add' activity.kind card.pk %}" class="shrink-0 whitespace-nowrap text-sm">+ Поставить</a>{% endif %}
     </div>
     {% if activity.open_tasks %}
       <ul class="divide-y divide-slate-100 text-sm">

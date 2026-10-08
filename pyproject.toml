@@ -46,6 +46,8 @@ django_settings_module = "config.settings.test"
 
 [tool.pytest.ini_options]
 python_files = ["test_*.py"]
+# e2e/ — браузерные тесты в своём контейнере (scripts/e2e/run.sh)
+testpaths = ["apps", "bot"]
 # --ds, а не DJANGO_SETTINGS_MODULE: у pytest-django переменная окружения важнее ini-файла,
 # и в контейнере разработки тесты запускались бы с dev-настройками (Redis, media, Argon2)
 addopts = "-ra --strict-markers --ds=config.settings.test"

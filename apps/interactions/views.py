@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from apps.accounts.models import User
-from apps.accounts.roles import is_staff_member
+from apps.accounts.roles import RoleCode, user_has_role
 from apps.core.pages import action_page, apply_service_errors
 
 from . import selectors, services
@@ -22,7 +22,9 @@ from .models import Interaction, Task, TaskStatus
 
 
 def _staff(request: HttpRequest) -> None:
-    if not is_staff_member(request.user):
+    """Взаимодействия и задачи — тем, кто работает с карточками (матрица 2.2: у аналитика
+    доступа нет)."""
+    if not user_has_role(request.user, RoleCode.ADMIN, RoleCode.COORDINATOR, RoleCode.CURATOR):
         raise PermissionDenied
 
 

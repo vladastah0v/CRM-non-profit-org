@@ -4,7 +4,7 @@
   <section class="card" aria-labelledby="requests-title">
     <div class="mb-3 flex items-center justify-between gap-2">
       <h2 id="requests-title">Заявки{% if help.open_count %} <span class="badge bg-sky-100 text-sky-800">открыто: {{ help.open_count }}</span>{% endif %}</h2>
-      {% if help.manages and not b.is_archived and b.status != "closed" %}<a href="{% url 'requests:create' b.pk %}" class="text-sm">+ Новая заявка</a>{% endif %}
+      {% if help.manages and not b.is_archived and b.status != "closed" %}<a href="{% url 'requests:create' b.pk %}" class="shrink-0 whitespace-nowrap text-sm">+ Новая заявка</a>{% endif %}
     </div>
     {% if help.requests %}
       <ul class="divide-y divide-slate-100 text-sm">
@@ -27,7 +27,7 @@
   <section class="card" aria-labelledby="assistance-title">
     <div class="mb-3 flex items-center justify-between gap-2">
       <h2 id="assistance-title">Оказанная помощь</h2>
-      {% if help.manages and not b.is_archived and b.status != "closed" %}<a href="{% url 'requests:assistance_add' b.pk %}" class="text-sm">+ Зарегистрировать</a>{% endif %}
+      {% if help.manages and not b.is_archived and b.status != "closed" %}<a href="{% url 'requests:assistance_add' b.pk %}" class="shrink-0 whitespace-nowrap text-sm">+ Зарегистрировать</a>{% endif %}
     </div>
     {% if help.assistance %}
       {% if help.total_amount %}<p class="mb-2 text-sm text-slate-600">Всего на сумму: <strong class="text-slate-900">{{ help.total_amount|floatformat:"2g" }} ₽</strong></p>{% endif %}

@@ -19,9 +19,11 @@ from apps.audit.services import log_event
 from apps.beneficiaries.models import Beneficiary
 from apps.core.crypto import DecryptionError
 from apps.core.pages import action_page, apply_service_errors
+from apps.core.xlsx import build_workbook, xlsx_response
 from apps.volunteers.models import Volunteer
 
 from . import anonymize
+from . import subject_export as subject_export_module
 from .files import PHOTO_TYPES, parse_download_token, read_attachment
 from .forms import AnonymizeForm, DismissErasureForm
 from .models import Attachment
@@ -196,3 +198,23 @@ def dismiss_erasure(request: HttpRequest, kind: str, pk: str) -> HttpResponse:
         intro="Снимайте запрос, только если у фонда есть иное законное основание хранить данные "
         "(ч. 5 ст. 21 152-ФЗ). Решение записывается в журнал аудита.",
     )
+
+
+@login_required
+@require_GET
+@never_cache
+def subject_export(request: HttpRequest, kind: str, pk: str) -> HttpResponse:
+    """НФТ-ПД-05: все данные человека по его запросу — одной книгой Excel."""
+    person = _person(request, kind, pk)
+    if kind == "volunteer":
+        sheets = subject_export_module.volunteer_sheets(person)
+    else:
+        sheets = subject_export_module.beneficiary_sheets(person)
+        log_event(AuditAction.VIEW_SENSITIVE, request=request, obj=person, extra={"via": "export"})
+    log_event(
+        AuditAction.EXPORT,
+        request=request,
+        obj=person,
+        extra={"export": "subject_request", "sheets": len(sheets)},
+    )
+    return xlsx_response(build_workbook(sheets), "dannye-cheloveka")
