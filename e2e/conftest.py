@@ -67,4 +67,11 @@ def shot(page: Page, name: str) -> None:
 
 
 def no_horizontal_scroll(page: Page) -> bool:
-    return bool(page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"))
+    """Страница не шире экрана. Сравнение с screen.width, а не только с innerWidth: мобильный
+    браузер расширяет область вёрстки (innerWidth) под слишком широкое содержимое."""
+    return bool(
+        page.evaluate(
+            "document.documentElement.scrollWidth"
+            " <= Math.min(window.innerWidth, window.screen.width) + 1"
+        )
+    )

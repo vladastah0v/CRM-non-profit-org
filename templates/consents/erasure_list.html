@@ -13,7 +13,7 @@
   <section class="card mb-4" aria-labelledby="pending-title">
     <h2 id="pending-title" class="mb-3">Ждут обезличивания{% if pending %} <span class="badge bg-red-100 text-red-800">{{ pending|length }}</span>{% endif %}</h2>
     {% if pending %}
-      <div class="overflow-x-auto">
+      <div class="relative overflow-x-auto">
         <table class="table">
           <thead><tr><th scope="col">Карточка</th><th scope="col">Кто</th><th scope="col">Запрошено</th><th scope="col">Срок</th><th scope="col"><span class="sr-only">Действия</span></th></tr></thead>
           <tbody class="divide-y divide-slate-100">
