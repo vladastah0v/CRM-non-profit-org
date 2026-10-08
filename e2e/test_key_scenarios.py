@@ -95,6 +95,11 @@ def test_coordinator_filters_without_reload(page: Page, errors: list[str]) -> No
     expect(page.locator("#volunteer-results")).to_contain_text("Волонтёрова")
     page.get_by_label("Статус").select_option(label="Анкета")
     expect(page.locator("#volunteer-results")).not_to_contain_text("Волонтёрова")
+    # «Назад» возвращает прошлый фильтр, а снимки страниц с ФИО не хранятся в браузере
+    page.go_back()
+    expect(page).to_have_url(re.compile(r"status=active"))
+    expect(page.locator("#volunteer-results")).to_contain_text("Волонтёрова")
+    assert page.evaluate("localStorage.getItem('htmx-history-cache')") is None
     assert errors == []
 
 

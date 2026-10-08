@@ -63,6 +63,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.accounts.middleware.NoStoreForSignedInMiddleware",
     "django_htmx.middleware.HtmxMiddleware",
     "django_otp.middleware.OTPMiddleware",
     "apps.accounts.middleware.RequireOTPMiddleware",
