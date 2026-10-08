@@ -36,6 +36,10 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.dev
 
+  bot:
+    volumes:
+      - ./bot:/app/bot
+
   # Пересборка CSS при изменении шаблонов
   tailwind:
     build:

@@ -11,6 +11,7 @@ from .models import (
     District,
     LeavingReason,
     Program,
+    ShiftType,
     Skill,
     TrainingType,
     VolunteerSource,
@@ -95,4 +96,9 @@ class BeneficiarySourceAdmin(ReferenceAdmin):
 
 @admin.register(CaseClosingReason)
 class CaseClosingReasonAdmin(ReferenceAdmin):
+    fields = ("name", "description", "sort_order", *ReferenceAdmin.readonly_fields)
+
+
+@admin.register(ShiftType)
+class ShiftTypeAdmin(ReferenceAdmin):
     fields = ("name", "description", "sort_order", *ReferenceAdmin.readonly_fields)

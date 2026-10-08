@@ -20,6 +20,7 @@ from apps.consents.services import create_volunteer_consent, revoke_consent
 from apps.core.list_filters import RESET_PARAM, restore_or_save
 from apps.core.pages import action_page, apply_service_errors
 from apps.interactions.selectors import card_activity
+from apps.shifts.selectors import volunteer_shifts
 
 from . import permissions, selectors, services
 from .filters import SAVED_PARAMS
@@ -118,6 +119,7 @@ def volunteer_detail(request: HttpRequest, pk: str) -> HttpResponse:
             "photo_url": photo_url,
             "scan_urls": scan_urls,
             "activity": card_activity(request.user, volunteer),
+            "shifts": volunteer_shifts(request.user, volunteer),
         },
     )
 
@@ -398,4 +400,37 @@ def volunteer_restore(request: HttpRequest, pk: str) -> HttpResponse:
     volunteer = selectors.get_managed_volunteer(request.user, pk)
     services.restore_volunteer(volunteer, request=request)
     messages.success(request, "Карточка возвращена из архива.")
+    return redirect("volunteers:detail", pk=volunteer.pk)
+
+
+# ---------------------------------------------------------------------------
+# Telegram-бот (п. 7.2)
+# ---------------------------------------------------------------------------
+@login_required
+@require_POST
+def bot_code(request: HttpRequest, pk: str) -> HttpResponse:
+    """Одноразовый код привязки бота. Показывается один раз — в сообщении на странице."""
+    volunteer, response = _editable_volunteer(request, pk)
+    if response is not None:
+        return response
+    try:
+        code = services.issue_bot_link_code(volunteer, request=request)
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+    else:
+        messages.success(
+            request,
+            f"Код привязки бота: {code}. Передайте его волонтёру лично или по телефону: "
+            "он откроет бота, нажмёт «Старт» и отправит код. Код действует 72 часа, "
+            "повторно его не показать — при потере выдайте новый.",
+        )
+    return redirect("volunteers:detail", pk=volunteer.pk)
+
+
+@login_required
+@require_POST
+def bot_unlink(request: HttpRequest, pk: str) -> HttpResponse:
+    volunteer = selectors.get_managed_volunteer(request.user, pk)
+    services.unlink_telegram(volunteer, request=request)
+    messages.success(request, "Telegram отвязан: сообщения от бота приходить перестанут.")
     return redirect("volunteers:detail", pk=volunteer.pk)

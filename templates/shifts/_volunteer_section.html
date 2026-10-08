@@ -1,0 +1,67 @@
+{# Смены, визиты и бот в карточке волонтёра. Контекст: shifts (VolunteerShifts), v #}
+<div class="mt-4 grid gap-4 lg:grid-cols-3">
+  <section class="card lg:col-span-2" aria-labelledby="shifts-title">
+    <h2 id="shifts-title" class="mb-3">Смены и визиты</h2>
+    <dl class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div><dt class="text-sm text-slate-500">Пришёл</dt><dd class="text-xl font-semibold">{{ shifts.attended }}</dd></div>
+      <div><dt class="text-sm text-slate-500">Не пришёл</dt><dd class="text-xl font-semibold {% if shifts.no_show %}text-red-700{% endif %}">{{ shifts.no_show }}</dd></div>
+      <div><dt class="text-sm text-slate-500">Отказался</dt><dd class="text-xl font-semibold">{{ shifts.declined }}</dd></div>
+      <div><dt class="text-sm text-slate-500">Последняя смена</dt><dd class="font-medium">{{ shifts.last_shift_at|date:"d.m.Y"|default:"—" }}</dd></div>
+    </dl>
+    <h3 class="mb-2 text-sm font-medium text-slate-700">Предстоящие</h3>
+    {% if shifts.upcoming %}
+      <ul class="mb-4 divide-y divide-slate-100 text-sm">
+        {% for a in shifts.upcoming %}
+          <li class="py-2">
+            <a href="{{ a.get_absolute_url }}" class="font-medium">{{ a.title }}</a>
+            <span class="badge ml-1 {{ a.status_badge }}">{{ a.get_status_display }}</span>
+            <br><span class="text-slate-600">{{ a.starts|date:"D, d.m.Y H:i" }}–{{ a.ends|date:"H:i" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="mb-4 text-sm text-slate-600">Нет предстоящих смен и визитов.</p>
+    {% endif %}
+    {% if shifts.recent %}
+      <h3 class="mb-2 text-sm font-medium text-slate-700">Недавние</h3>
+      <ul class="divide-y divide-slate-100 text-sm">
+        {% for a in shifts.recent %}
+          <li class="py-2">
+            <a href="{{ a.get_absolute_url }}">{{ a.title }}</a> · {{ a.starts|date:"d.m.Y" }}
+            <span class="badge ml-1 {{ a.status_badge }}">{{ a.get_status_display }}</span>
+            {% if a.hours is not None %}<span class="text-slate-600"> · {{ a.hours|floatformat:"-2" }} ч</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="bot-title">
+    <h2 id="bot-title" class="mb-3">Telegram-бот</h2>
+    {% if shifts.bot_linked %}
+      <p class="text-sm"><span class="badge bg-emerald-100 text-emerald-800">подключён</span></p>
+      <p class="form-help mt-2">Волонтёр видит свои смены, записывается, подтверждает участие и отмечает часы.</p>
+    {% else %}
+      <p class="text-sm"><span class="badge bg-slate-100 text-slate-700">не подключён</span>{% if shifts.bot_code_pending %} <span class="badge bg-sky-100 text-sky-800">код выдан</span>{% endif %}</p>
+      <p class="form-help mt-2">
+        Выдайте одноразовый код и передайте волонтёру: он отправит его боту{% if shifts.bot_username %} @{{ shifts.bot_username }}{% endif %}. Код действует 72 часа.
+      </p>
+    {% endif %}
+    {% if shifts.can_manage %}
+      <div class="mt-3 flex flex-wrap gap-2">
+        {% if v.status != "left" %}
+          <form method="post" action="{% url 'volunteers:bot_code' v.pk %}"{% if shifts.bot_linked or shifts.bot_code_pending %} data-confirm="Выдать новый код? Прежний перестанет действовать."{% endif %}>
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary">{% if shifts.bot_linked %}Код для нового телефона{% else %}Выдать код{% endif %}</button>
+          </form>
+        {% endif %}
+        {% if shifts.bot_linked %}
+          <form method="post" action="{% url 'volunteers:bot_unlink' v.pk %}" data-confirm="Отвязать Telegram? Напоминания приходить перестанут.">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary">Отвязать</button>
+          </form>
+        {% endif %}
+      </div>
+    {% endif %}
+  </section>
+</div>

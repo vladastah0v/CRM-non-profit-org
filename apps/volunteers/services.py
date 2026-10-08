@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import datetime
+import secrets
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -15,13 +16,16 @@ from django.db import transaction
 from django.db.models import Sum
 from django.http import HttpRequest
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 
+from apps.accounts.models import Role, User, UserRole
 from apps.accounts.roles import RoleCode
 from apps.audit.models import AuditAction
 from apps.audit.services import log_event
 from apps.consents.files import PHOTO_TYPES, store_attachment
 from apps.consents.models import Consent, ConsentChannel, ConsentKind, ConsentSigner
 from apps.consents.services import create_volunteer_consent
+from apps.core.context import acting_as
 from apps.core.duplicates import PersonMatch, find_person_duplicates
 from apps.core.models import (
     District,
@@ -34,6 +38,8 @@ from apps.core.models import (
 from apps.core.normalize import normalize_email, normalize_name, normalize_phone
 from apps.notifications.models import NotificationKind
 from apps.notifications.services import notify, users_with_role
+from apps.shifts.models import AssignmentStatus
+from apps.shifts.services import cancel_for_volunteer
 
 from .models import (
     Volunteer,
@@ -411,6 +417,7 @@ def change_status(
         locked.leaving_reason = reason
         locked.left_on = today
         fields += ["leaving_reason", "left_on"]
+        cancel_for_volunteer(locked, comment="Волонтёр выбыл")
     locked.save(update_fields=fields)
     _record_status(locked, from_status, to_status, reason=reason, comment=comment.strip())
     log_event(
@@ -484,18 +491,34 @@ def add_manual_hours(
     return record
 
 
-def total_hours(volunteer: Volunteer) -> Decimal:
-    """Отработанные часы. Часы из смен добавятся с модулем «Смены» (этап 7)."""
+def manual_hours_total(volunteer: Volunteer) -> Decimal:
     total = volunteer.manual_hours.filter(is_archived=False).aggregate(total=Sum("hours"))["total"]
     return total or Decimal("0")
+
+
+def shift_hours_total(volunteer: Volunteer) -> Decimal:
+    """Часы из смен и визитов — автоматически по отметкам явки (ФТ-В-07, ФТ-С-04)."""
+    total = (
+        volunteer.assignments.active()
+        .filter(status=AssignmentStatus.ATTENDED)
+        .aggregate(total=Sum("hours"))["total"]
+    )
+    return total or Decimal("0")
+
+
+def total_hours(volunteer: Volunteer) -> Decimal:
+    """Отработанные часы: по сменам и визитам плюс внесённые вручную."""
+    return manual_hours_total(volunteer) + shift_hours_total(volunteer)
 
 
 # ---------------------------------------------------------------------------
 # Архив
 # ---------------------------------------------------------------------------
+@transaction.atomic
 def archive_volunteer(volunteer: Volunteer, *, request: HttpRequest | None = None) -> None:
     if not volunteer.is_archived:
         volunteer.archive()
+        cancel_for_volunteer(volunteer, comment="Карточка волонтёра в архиве")
         log_event(AuditAction.ARCHIVE, request=request, obj=volunteer)
 
 
@@ -503,6 +526,120 @@ def restore_volunteer(volunteer: Volunteer, *, request: HttpRequest | None = Non
     if volunteer.is_archived:
         volunteer.restore()
         log_event(AuditAction.RESTORE, request=request, obj=volunteer)
+
+
+# ---------------------------------------------------------------------------
+# Привязка Telegram-бота (п. 7.2)
+# ---------------------------------------------------------------------------
+BOT_LINK_CODE_TTL = datetime.timedelta(hours=72)
+# Без похожих символов (0 и O, 1 и I): код могут диктовать по телефону
+BOT_LINK_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+BOT_LINK_CODE_LENGTH = 8
+
+
+def normalize_link_code(raw: str) -> str:
+    return "".join(raw.split()).replace("-", "").upper()
+
+
+def _link_code_hash(code: str) -> str:
+    return salted_hmac("volunteers.bot_link_code", normalize_link_code(code)).hexdigest()
+
+
+def can_use_bot(volunteer: Volunteer) -> bool:
+    return not volunteer.is_archived and volunteer.status != S.LEFT
+
+
+@transaction.atomic
+def issue_bot_link_code(volunteer: Volunteer, *, request: HttpRequest | None = None) -> str:
+    """Одноразовый код привязки бота на 72 часа. Новый код заменяет прежний."""
+    if not can_use_bot(volunteer):
+        raise ValidationError("Бот доступен только действующим волонтёрам.")
+    raw = "".join(secrets.choice(BOT_LINK_ALPHABET) for _ in range(BOT_LINK_CODE_LENGTH))
+    volunteer.bot_link_code = _link_code_hash(raw)
+    volunteer.bot_link_code_expires = timezone.now() + BOT_LINK_CODE_TTL
+    volunteer.save(update_fields=["bot_link_code", "bot_link_code_expires"])
+    log_event(
+        AuditAction.PERMISSION_CHANGE,
+        request=request,
+        obj=volunteer,
+        extra={"event": "bot_link_code_issued"},
+    )
+    return f"{raw[:4]}-{raw[4:]}"
+
+
+def _ensure_bot_user(volunteer: Volunteer) -> User:
+    """Учётная запись с ролью «Волонтёр»: без пароля, в веб-интерфейс не пускает
+    (вход — только для ролей сотрудников). ФИО не копируется — оно хранится в карточке."""
+    user = volunteer.user
+    if user is None:
+        user = User.objects.create_user(username=f"volunteer-{volunteer.pk.hex[:12]}")
+        UserRole.objects.create(user=user, role=Role.objects.get(code=RoleCode.VOLUNTEER))
+        volunteer.user = user
+    elif not user.is_active:
+        user.is_active = True
+        user.save(update_fields=["is_active"])
+    return user
+
+
+@transaction.atomic
+def link_telegram(code: str, telegram_id: int) -> Volunteer:
+    """Привязать Telegram по коду из CRM. Код одноразовый: после привязки стирается."""
+    if len(normalize_link_code(code)) != BOT_LINK_CODE_LENGTH:
+        raise ValidationError("Код неверный или устарел. Попросите у координатора новый.")
+    volunteer = (
+        Volunteer.objects.select_for_update()
+        .filter(
+            bot_link_code=_link_code_hash(code),
+            bot_link_code_expires__gt=timezone.now(),
+            is_archived=False,
+        )
+        .exclude(status=S.LEFT)
+        .first()
+    )
+    if volunteer is None:
+        raise ValidationError("Код неверный или устарел. Попросите у координатора новый.")
+    if Volunteer.objects.filter(telegram_id=telegram_id).exclude(pk=volunteer.pk).exists():
+        raise ValidationError(
+            "Этот Telegram уже привязан к другой карточке. Обратитесь к координатору."
+        )
+    user = _ensure_bot_user(volunteer)
+    volunteer.telegram_id = telegram_id
+    volunteer.bot_link_code = ""
+    volunteer.bot_link_code_expires = None
+    with acting_as(user):
+        volunteer.save(
+            update_fields=["telegram_id", "user", "bot_link_code", "bot_link_code_expires"]
+        )
+        log_event(
+            AuditAction.PERMISSION_CHANGE,
+            obj=volunteer,
+            fields=["telegram_id"],
+            extra={"event": "bot_linked"},
+        )
+    return volunteer
+
+
+@transaction.atomic
+def unlink_telegram(
+    volunteer: Volunteer, *, by_volunteer: bool = False, request: HttpRequest | None = None
+) -> None:
+    """Отвязать бота: координатор в карточке или сам волонтёр командой в боте."""
+    if volunteer.telegram_id is None and not volunteer.bot_link_code:
+        return
+    volunteer.telegram_id = None
+    volunteer.bot_link_code = ""
+    volunteer.bot_link_code_expires = None
+    volunteer.save(update_fields=["telegram_id", "bot_link_code", "bot_link_code_expires"])
+    if volunteer.user is not None and volunteer.user.is_active:
+        volunteer.user.is_active = False
+        volunteer.user.save(update_fields=["is_active"])
+    log_event(
+        AuditAction.PERMISSION_CHANGE,
+        request=request,
+        obj=volunteer,
+        fields=["telegram_id"],
+        extra={"event": "bot_unlinked", "by_volunteer": by_volunteer},
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,28 @@
+{# Визиты волонтёров в карточке подопечного (ФТ-С-05). Контекст: visits, b #}
+{% if visits %}
+  <section class="card mt-4" aria-labelledby="visits-title">
+    <div class="mb-3 flex items-center justify-between gap-2">
+      <h2 id="visits-title">Визиты волонтёров</h2>
+      {% if visits.can_assign %}<a href="{% url 'shifts:visit_create' b.pk %}" class="text-sm">+ Назначить визит</a>{% endif %}
+    </div>
+    {% if visits.upcoming or visits.recent %}
+      <ul class="divide-y divide-slate-100 text-sm">
+        {% for a in visits.upcoming %}
+          <li class="py-2">
+            <a href="{% url 'shifts:visit_detail' a.pk %}" class="font-medium">{{ a.starts|date:"D, d.m.Y H:i" }}–{{ a.ends|date:"H:i" }}</a>
+            <span class="badge ml-1 {{ a.status_badge }}">{{ a.get_status_display }}</span>
+            <br><span class="text-slate-600">{{ a.volunteer.full_name }}</span>
+          </li>
+        {% endfor %}
+        {% for a in visits.recent %}
+          <li class="py-2 text-slate-600">
+            <a href="{% url 'shifts:visit_detail' a.pk %}">{{ a.starts|date:"d.m.Y" }}</a> · {{ a.volunteer.full_name }}
+            <span class="badge ml-1 {{ a.status_badge }}">{{ a.get_status_display }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-slate-600">Визитов не было.{% if not visits.can_assign and b.status != "in_work" %} Визиты назначаются по случаю «В работе».{% endif %}</p>
+    {% endif %}
+  </section>
+{% endif %}

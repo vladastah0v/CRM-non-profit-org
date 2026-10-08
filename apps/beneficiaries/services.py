@@ -27,6 +27,7 @@ from apps.core.models import CaseClosingReason, Program
 from apps.core.normalize import normalize_email, normalize_phone
 from apps.notifications.models import NotificationKind
 from apps.notifications.services import notify
+from apps.shifts.services import cancel_for_beneficiary
 
 from .models import (
     Beneficiary,
@@ -380,6 +381,9 @@ def change_status(
         locked.closed_on = timezone.localdate()
         fields += ["closing_reason", "outcome", "closed_on"]
     locked.save(update_fields=fields)
+    if to_status in (S.CLOSED, S.PAUSED):
+        # Данные подопечного больше не должны уходить волонтёрам (п. 2.3, ФТ-Д-02)
+        cancel_for_beneficiary(locked, comment=f"Случай: «{S(to_status).label}»")
     _record_status(
         locked,
         from_status,
@@ -572,9 +576,11 @@ def archive_related_person(person: RelatedPerson, *, request: HttpRequest | None
 # ---------------------------------------------------------------------------
 # Архив
 # ---------------------------------------------------------------------------
+@transaction.atomic
 def archive_beneficiary(beneficiary: Beneficiary, *, request: HttpRequest | None = None) -> None:
     if not beneficiary.is_archived:
         beneficiary.archive()
+        cancel_for_beneficiary(beneficiary, comment="Карточка подопечного в архиве")
         log_event(AuditAction.ARCHIVE, request=request, obj=beneficiary)
 
 

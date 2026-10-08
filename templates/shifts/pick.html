@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% load crm %}
+
+{% block title %}Подбор волонтёров: {{ s.title }}{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{{ s.get_absolute_url }}">← К смене</a></nav>
+  <h1>Подбор волонтёров</h1>
+  <p class="mb-6 mt-1 text-slate-600">
+    {{ s.title }} · {{ s.starts_at|date:"D, d.m.Y H:i" }}–{{ s.ends_at|date:"H:i" }}{% if s.district %} · {{ s.district }}{% endif %}
+    · записано {{ occupied }} из {{ s.volunteers_needed }}
+  </p>
+
+  <div class="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+    <aside>
+      <form method="get" class="card space-y-4" role="search" aria-label="Условия подбора">
+        {% include "partials/field.html" with field=filter_form.q %}
+        {% include "partials/checkbox.html" with field=filter_form.skills %}
+        {% if s.district %}{% include "partials/checkbox.html" with field=filter_form.district %}{% endif %}
+        {% include "partials/checkbox.html" with field=filter_form.available %}
+        <button type="submit" class="btn btn-secondary">Подобрать</button>
+        <p class="form-help">
+          Показаны активные волонтёры. Уже записанные на эту смену и занятые в это время не показываются.
+          {% if required_skills %}Нужные навыки: {{ required_skills|join:", " }}.{% endif %}
+        </p>
+      </form>
+    </aside>
+
+    <section aria-labelledby="candidates-title">
+      <h2 id="candidates-title" class="sr-only">Кандидаты</h2>
+      {% if candidates %}
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <ul class="card divide-y divide-slate-100 p-0">
+            {% for c in candidates %}
+              <li>
+                <label for="cand-{{ c.volunteer.pk }}" class="flex cursor-pointer items-start gap-3 px-4 py-3 hover:bg-slate-50">
+                  <input type="checkbox" name="volunteer" value="{{ c.volunteer.pk }}" id="cand-{{ c.volunteer.pk }}"
+                         class="mt-1 h-4 w-4 rounded border-slate-300 text-brand-600">
+                  <span class="min-w-0 flex-1">
+                    <span class="font-medium">{{ c.volunteer.full_name }}</span>
+                    <span class="text-sm text-slate-600">· {{ c.volunteer.phone|phone }}</span>
+                    <span class="mt-1 flex flex-wrap gap-1">
+                      {% if required_skills %}
+                        {% if c.has_skills %}<span class="badge bg-emerald-100 text-emerald-800">все навыки</span>{% else %}<span class="badge bg-amber-100 text-amber-800">не все навыки</span>{% endif %}
+                      {% endif %}
+                      {% if c.available %}<span class="badge bg-emerald-100 text-emerald-800">доступен в это время</span>{% else %}<span class="badge bg-slate-100 text-slate-700">доступность не совпадает</span>{% endif %}
+                      {% if s.district %}{% if c.same_district %}<span class="badge bg-emerald-100 text-emerald-800">{{ c.volunteer.district.name }}</span>{% elif c.volunteer.district %}<span class="badge bg-slate-100 text-slate-700">{{ c.volunteer.district.name }}</span>{% endif %}{% endif %}
+                    </span>
+                  </span>
+                </label>
+              </li>
+            {% endfor %}
+          </ul>
+          <div class="flex flex-wrap gap-3">
+            <button type="submit" class="btn btn-primary">Назначить отмеченных</button>
+            <a href="{{ s.get_absolute_url }}" class="btn btn-secondary">Отмена</a>
+          </div>
+          <p class="form-help">Назначенные волонтёры с подключённым ботом получат сообщение с кнопками «Приду» и «Не смогу».</p>
+        </form>
+      {% else %}
+        <div class="card text-center text-slate-600">
+          <p>Подходящих волонтёров нет. Снимите часть условий подбора.</p>
+        </div>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

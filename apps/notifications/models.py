@@ -20,6 +20,7 @@ class NotificationKind(models.TextChoices):
     REQUEST_DUE = "request_due", "Срок заявки"
     TASK_ASSIGNED = "task_assigned", "Назначена задача"
     TASK_DUE = "task_due", "Срок задачи"
+    ASSIGNMENT_DECLINED = "assignment_declined", "Волонтёр отказался от смены или визита"
 
 
 class NotificationQuerySet(ArchivableQuerySet):

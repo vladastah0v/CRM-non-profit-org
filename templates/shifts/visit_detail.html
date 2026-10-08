@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Визит волонтёра{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация">
+    {% if can_open_card %}<a href="{{ visit.beneficiary.get_absolute_url }}">← Карточка подопечного</a>{% else %}<a href="{% url 'shifts:list' %}">← Смены</a>{% endif %}
+  </nav>
+
+  <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h1>Визит к подопечному</h1>
+      <p class="mt-1 text-slate-600">{{ visit.visit_starts_at|date:"l, d.m.Y H:i" }}–{{ visit.visit_ends_at|date:"H:i" }}</p>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <span class="badge {{ visit.status_badge }}">{{ visit.get_status_display }}</span>
+        {% if visit.is_archived %}<span class="badge bg-slate-200 text-slate-700">в архиве</span>{% endif %}
+      </div>
+    </div>
+    {% if can_manage and not visit.is_archived %}
+      <div class="flex flex-wrap gap-2">
+        {% if visit.is_pending and not visit.has_started %}<a href="{% url 'shifts:visit_edit' visit.pk %}" class="btn btn-secondary">Изменить</a>{% endif %}
+        {% if transitions %}<a href="{% url 'shifts:assignment_status' visit.pk %}" class="btn btn-primary">{% if visit.has_started %}Отметить явку{% else %}Сменить статус{% endif %}</a>{% endif %}
+        {% if visit.status == "attended" %}<a href="{% url 'shifts:assignment_hours' visit.pk %}" class="btn btn-secondary">Часы</a>{% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-3">
+    <section class="card lg:col-span-2" aria-labelledby="visit-title">
+      <h2 id="visit-title" class="mb-3">Визит</h2>
+      <dl class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <div><dt class="text-sm text-slate-500">Подопечный</dt><dd>{{ visit.beneficiary.full_name }}</dd></div>
+        <div><dt class="text-sm text-slate-500">Волонтёр</dt><dd><a href="{% url 'volunteers:detail' visit.volunteer_id %}">{{ visit.volunteer.full_name }}</a></dd></div>
+        <div><dt class="text-sm text-slate-500">Программа</dt><dd>{{ visit.program|default:"—" }}</dd></div>
+        <div><dt class="text-sm text-slate-500">Часы</dt><dd>{% if visit.hours is not None %}{{ visit.hours|floatformat:"-2" }}{% else %}—{% endif %}</dd></div>
+        <div class="sm:col-span-2"><dt class="text-sm text-slate-500">Комментарий к заданию</dt><dd class="whitespace-pre-line">{{ visit.task_comment|default:"—" }}</dd></div>
+        <div><dt class="text-sm text-slate-500">Назначен</dt><dd>{{ visit.created_at|date:"d.m.Y H:i" }}{% if visit.created_by %}, {{ visit.created_by }}{% endif %}</dd></div>
+      </dl>
+      <p class="form-help mt-4">В боте волонтёр видит только имя подопечного, адрес, телефон и комментарий — пока визит не прошёл.</p>
+    </section>
+
+    <section class="card" aria-labelledby="history-title">
+      <h2 id="history-title" class="mb-3">История</h2>
+      <ol class="divide-y divide-slate-100 text-sm">
+        {% for ch in history %}
+          <li class="py-2">
+            <span class="text-slate-500">{{ ch.created_at|date:"d.m.Y H:i" }}</span> ·
+            {% if ch.from_status %}{{ ch.get_from_status_display }} → {% endif %}<span class="font-medium">{{ ch.get_to_status_display }}</span>
+            {% if ch.via_bot %}<span class="text-slate-500"> · через бота</span>{% elif ch.created_by %}<span class="text-slate-500"> · {{ ch.created_by }}</span>{% endif %}
+            {% if ch.comment %}<br><span class="text-slate-600">{{ ch.comment }}</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    </section>
+  </div>
+{% endblock %}

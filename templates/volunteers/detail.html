@@ -105,7 +105,7 @@
             <div><dt class="text-sm text-slate-500">Дата рождения</dt><dd>{{ v.birth_date|date:"d.m.Y" }} ({{ v.age|ru_plural:"год,года,лет" }})</dd></div>
             <div><dt class="text-sm text-slate-500">Телефон</dt><dd><a href="tel:{{ v.phone }}">{{ v.phone|phone }}</a></dd></div>
             <div><dt class="text-sm text-slate-500">Email</dt><dd>{% if v.email %}<a href="mailto:{{ v.email }}">{{ v.email }}</a>{% else %}—{% endif %}</dd></div>
-            <div><dt class="text-sm text-slate-500">Telegram</dt><dd>{% if v.telegram_username %}@{{ v.telegram_username }}{% else %}—{% endif %}{% if v.telegram_id %} · бот подключён{% endif %}</dd></div>
+            <div><dt class="text-sm text-slate-500">Telegram</dt><dd>{% if v.telegram_username %}@{{ v.telegram_username }}{% else %}—{% endif %}</dd></div>
             <div><dt class="text-sm text-slate-500">Город и район</dt><dd>{{ v.city|default:"" }}{% if v.city and v.district %}, {% endif %}{{ v.district|default:"" }}{% if not v.city and not v.district %}—{% endif %}</dd></div>
             <div><dt class="text-sm text-slate-500">Источник прихода</dt><dd>{{ v.source|default:"—" }}</dd></div>
             <div><dt class="text-sm text-slate-500">Дата начала</dt><dd>{{ v.start_date|date:"d.m.Y"|default:"—" }}</dd></div>
@@ -129,7 +129,7 @@
           {% if card.can_manage and not v.is_archived %}<a href="{% url 'volunteers:hours_add' v.pk %}" class="text-sm">+ Добавить</a>{% endif %}
         </div>
         <p class="text-3xl font-semibold">{{ card.total_hours|floatformat:"-2" }}</p>
-        <p class="form-help">Всего отработано. Часы по сменам добавятся с модулем «Смены».</p>
+        <p class="form-help">Всего отработано{% if shifts %}, из них по сменам и визитам — {{ shifts.hours|floatformat:"-2" }}: считаются автоматически по отметкам явки{% endif %}. Ниже — внесённые вручную.</p>
         {% if card.hours %}
           <ul class="mt-3 divide-y divide-slate-100 text-sm">
             {% for h in card.hours|slice:":5" %}
@@ -219,6 +219,8 @@
         </ol>
       </section>
     </div>
+
+    {% if shifts %}{% include "shifts/_volunteer_section.html" %}{% endif %}
 
     {% include "interactions/_card_section.html" with card=v %}
   {% endif %}

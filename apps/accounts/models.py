@@ -3,6 +3,7 @@ from typing import Any, Self
 
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import AbstractUser, UserManager
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models.functions import Lower
 from django.utils import timezone
@@ -11,7 +12,7 @@ from django_otp.plugins.otp_totp.models import TOTPDevice, default_key
 
 from apps.core.context import get_current_user
 from apps.core.fields import EncryptedTextField
-from apps.core.models import BaseModel
+from apps.core.models import ArchivableQuerySet, BaseModel
 
 from .roles import RoleCode, user_has_role
 
@@ -168,3 +169,47 @@ class UserRole(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.user} — {self.role}"
+
+
+class TokenScope(models.TextChoices):
+    """Права сервисного токена (п. 7.5): у каждого токена — свой набор."""
+
+    BOT = "bot", "Telegram-бот: API волонтёра"
+
+
+class ServiceTokenQuerySet(ArchivableQuerySet):
+    def usable(self) -> Self:
+        now = timezone.now()
+        return self.filter(is_archived=False).filter(
+            models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=now)
+        )
+
+
+class ServiceToken(BaseModel):
+    """Токен сервиса (бота, интеграции) для внутреннего API.
+
+    В базе — только SHA-256 токена: по утечке базы токен не восстановить. Сам токен
+    показывается один раз при выпуске (`manage.py issue_service_token`). Отзыв — архив.
+    """
+
+    name = models.CharField("название", max_length=100)
+    scopes = ArrayField(
+        models.CharField(max_length=30, choices=TokenScope.choices), verbose_name="права"
+    )
+    key_prefix = models.CharField("начало токена", max_length=12, editable=False)
+    key_hash = models.CharField(max_length=64, unique=True, editable=False)
+    expires_at = models.DateTimeField("действует до", null=True, blank=True)
+    last_used_at = models.DateTimeField("последнее использование", null=True, editable=False)
+
+    objects = ServiceTokenQuerySet.as_manager()  # type: ignore[misc]
+
+    class Meta:
+        verbose_name = "сервисный токен"
+        verbose_name_plural = "сервисные токены"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.key_prefix}…)"
+
+    def has_scope(self, scope: str) -> bool:
+        return scope in self.scopes

@@ -19,6 +19,8 @@ urlpatterns = [
         name="consent_revoke",
     ),
     path("<uuid:pk>/duplicate/", views.duplicate_resolve, name="duplicate_resolve"),
+    path("<uuid:pk>/bot/code/", views.bot_code, name="bot_code"),
+    path("<uuid:pk>/bot/unlink/", views.bot_unlink, name="bot_unlink"),
     path("<uuid:pk>/archive/", views.volunteer_archive, name="archive"),
     path("<uuid:pk>/restore/", views.volunteer_restore, name="restore"),
 ]

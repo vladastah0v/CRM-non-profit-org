@@ -18,7 +18,7 @@ from apps.audit.services import log_event
 from apps.core.admin_base import CRMModelAdmin
 
 from . import lockout, services
-from .models import Role, SecureTOTPDevice, User, UserRole
+from .models import Role, SecureTOTPDevice, ServiceToken, User, UserRole
 from .roles import RoleCode, invalidate_role_cache, user_has_role
 
 _ROLES_BEFORE = "_audit_roles_before"
@@ -189,6 +189,21 @@ class RoleAdmin(CRMModelAdmin):
     fields = ("code", "name", "description")
     readonly_fields = ("code",)
     actions: list[str] = []
+
+    def has_add_permission(self, request: HttpRequest, *args: Any) -> bool:
+        return False
+
+
+@admin.register(ServiceToken)
+class ServiceTokenAdmin(CRMModelAdmin):
+    """Токены выпускает команда `issue_service_token` (токен виден один раз).
+    Здесь — просмотр и отзыв: «Перевести в архив»."""
+
+    list_display = ("name", "key_prefix", "scopes", "expires_at", "last_used_at", "is_archived")
+    list_filter = ("is_archived",)
+    fields = ("name", "scopes", "key_prefix", "expires_at", "last_used_at", "is_archived")
+    readonly_fields = ("name", "scopes", "key_prefix", "last_used_at", "is_archived")
+    actions = ["archive_selected"]
 
     def has_add_permission(self, request: HttpRequest, *args: Any) -> bool:
         return False

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Смена: {{ s.title }}{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{% url 'shifts:list' %}">← Все смены</a></nav>
+
+  <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h1>{{ s.title }}</h1>
+      <p class="mt-1 text-slate-600">{{ s.shift_type }} · {{ s.starts_at|date:"l, d.m.Y H:i" }}–{{ s.ends_at|date:"H:i" }}</p>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <span class="badge {{ s.status_badge }}">{{ s.state_display }}</span>
+        {% if not s.is_cancelled %}
+          <span class="badge {% if card.free %}bg-amber-100 text-amber-800{% else %}bg-emerald-100 text-emerald-800{% endif %}">записано {{ card.occupied }} из {{ s.volunteers_needed }}</span>
+        {% endif %}
+        {% if s.is_archived %}<span class="badge bg-slate-200 text-slate-700">в архиве</span>{% endif %}
+      </div>
+    </div>
+    {% if card.can_manage and not s.is_archived %}
+      <div class="flex flex-wrap gap-2">
+        {% if card.can_assign %}
+          <a href="{% url 'shifts:pick' s.pk %}" class="btn btn-primary">Подобрать волонтёров</a>
+        {% endif %}
+        {% if card.can_mark_attendance %}
+          <a href="{% url 'shifts:attendance' s.pk %}" class="btn btn-primary">Отметить явку</a>
+        {% endif %}
+        {% if not s.is_cancelled %}
+          <a href="{% url 'shifts:edit' s.pk %}" class="btn btn-secondary">Изменить</a>
+          {% if not s.has_ended %}<a href="{% url 'shifts:cancel' s.pk %}" class="btn btn-secondary">Отменить смену</a>{% endif %}
+        {% endif %}
+        <form method="post" action="{% url 'shifts:archive' s.pk %}" data-confirm="Перевести смену в архив вместе с назначениями? Часы по ней перестанут учитываться.">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-secondary">В архив</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if s.is_cancelled %}
+    <div class="mb-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700" role="note">
+      Смена отменена: {{ s.cancel_reason }}
+    </div>
+  {% endif %}
+
+  <div class="grid gap-4 lg:grid-cols-3">
+    <section class="card lg:col-span-2" aria-labelledby="shift-title">
+      <h2 id="shift-title" class="mb-3">О смене</h2>
+      <dl class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <div><dt class="text-sm text-slate-500">Место</dt><dd>{{ s.address }}{% if s.district %}<br><span class="text-sm text-slate-600">{{ s.district }}</span>{% endif %}</dd></div>
+        <div><dt class="text-sm text-slate-500">Программа</dt><dd>{{ s.program|default:"—" }}</dd></div>
+        <div><dt class="text-sm text-slate-500">Требуемые навыки</dt><dd>{% for sk in s.skills.all %}<span class="badge mb-1 mr-1 bg-slate-100 text-slate-700">{{ sk }}</span>{% empty %}не нужны{% endfor %}</dd></div>
+        <div><dt class="text-sm text-slate-500">Запись через бота</dt><dd>{% if s.allow_signup %}открыта{% else %}только координатор{% endif %}</dd></div>
+        {% if s.description %}<div class="sm:col-span-2"><dt class="text-sm text-slate-500">Что делать</dt><dd class="whitespace-pre-line">{{ s.description }}</dd></div>{% endif %}
+        <div><dt class="text-sm text-slate-500">Создана</dt><dd>{{ s.created_at|date:"d.m.Y H:i" }}{% if s.created_by %}, {{ s.created_by }}{% endif %}</dd></div>
+      </dl>
+    </section>
+
+    <section class="card" aria-labelledby="history-title">
+      <h2 id="history-title" class="mb-3">История</h2>
+      {% if card.history %}
+        <ol class="divide-y divide-slate-100 text-sm">
+          {% for ch in card.history %}
+            <li class="py-2">
+              <span class="text-slate-500">{{ ch.created_at|date:"d.m H:i" }}</span> ·
+              {{ ch.assignment.volunteer.full_name }}:
+              {% if ch.from_status %}{{ ch.get_from_status_display|lower }} → {% endif %}<span class="font-medium">{{ ch.get_to_status_display|lower }}</span>
+              {% if ch.via_bot %}<span class="text-slate-500"> · через бота</span>{% elif ch.created_by %}<span class="text-slate-500"> · {{ ch.created_by }}</span>{% endif %}
+              {% if ch.comment %}<br><span class="text-slate-600">{{ ch.comment }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="text-sm text-slate-600">Пока никого не назначали.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="card mt-4" aria-labelledby="team-title">
+    <h2 id="team-title" class="mb-3">Волонтёры на смене</h2>
+    {% if card.rows %}
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead><tr><th scope="col">Волонтёр</th><th scope="col">Статус</th><th scope="col">Часы</th><th scope="col"><span class="sr-only">Действия</span></th></tr></thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for row in card.rows %}
+              {% with a=row.assignment %}
+                <tr>
+                  <td><a href="{% url 'volunteers:detail' a.volunteer_id %}">{{ a.volunteer.full_name }}</a></td>
+                  <td><span class="badge {{ a.status_badge }}">{{ a.get_status_display }}</span></td>
+                  <td>{% if a.hours is not None %}{{ a.hours|floatformat:"-2" }}{% else %}—{% endif %}</td>
+                  <td class="whitespace-nowrap text-right">
+                    {% if row.transitions %}<a href="{% url 'shifts:assignment_status' a.pk %}">Статус</a>{% endif %}
+                    {% if card.can_manage and a.status == "attended" %}<a href="{% url 'shifts:assignment_hours' a.pk %}" class="ml-3">Часы</a>{% endif %}
+                  </td>
+                </tr>
+              {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-sm text-slate-600">На смену пока никто не записан.{% if card.can_assign %} <a href="{% url 'shifts:pick' s.pk %}">Подобрать волонтёров</a>.{% endif %}</p>
+    {% endif %}
+  </section>
+{% endblock %}

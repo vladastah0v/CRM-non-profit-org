@@ -50,6 +50,7 @@ LOCAL_APPS = [
     "apps.beneficiaries",
     "apps.requests",
     "apps.interactions",
+    "apps.shifts",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -121,6 +122,11 @@ CELERY_BEAT_SCHEDULE: dict[str, dict] = {
     "request-deadline-reminders": {
         "task": "requests.send_deadline_reminders",
         "schedule": crontab(hour=8, minute=0),
+    },
+    # ФТ-У-01: напоминания волонтёрам за 24 и 2 часа — проверка каждые 10 минут
+    "shift-reminders": {
+        "task": "shifts.send_reminders",
+        "schedule": crontab(minute="*/10"),
     },
     "task-reminders": {
         "task": "interactions.send_task_reminders",
@@ -249,12 +255,23 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
-    "DEFAULT_THROTTLE_RATES": {"intake": "10/min"},
+    "DEFAULT_THROTTLE_RATES": {
+        "intake": "10/min",
+        # API бота: общий лимит токена и попытки ввода кода привязки с одного Telegram
+        "bot": "600/min",
+        "bot_link": "10/hour",
+    },
 }
 # Приём анкет с сайта (п. 7.1): общий с сайтом секрет подписи HMAC-SHA256.
 # Пусто — приём анкет выключен.
 # Сгенерировать: python -c "import secrets; print(secrets.token_hex(32))"
 INTAKE_HMAC_SECRET = env("INTAKE_HMAC_SECRET", default="")
+
+# Telegram-бот волонтёров (п. 7.2). Токен от @BotFather: Celery отправляет напоминания,
+# бот (отдельный процесс, bot/) принимает ответы. Пусто — сообщения в Telegram не отправляются.
+TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", default="")
+# Имя бота без @ — для ссылки привязки в карточке волонтёра (необязательно)
+TELEGRAM_BOT_USERNAME = env("TELEGRAM_BOT_USERNAME", default="")
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "CRM НКО — внутренний API",

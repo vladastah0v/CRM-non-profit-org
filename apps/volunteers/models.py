@@ -91,8 +91,13 @@ class Volunteer(BaseModel):
         validators=[telegram_username_validator],
         help_text="Имя пользователя без @.",
     )
-    # Заполняет бот при привязке аккаунта (этап 7)
-    telegram_id = models.BigIntegerField("Telegram ID", null=True, blank=True, unique=True)
+    # Заполняется при привязке бота одноразовым кодом из CRM (п. 7.2)
+    telegram_id = models.BigIntegerField(
+        "Telegram ID", null=True, blank=True, unique=True, editable=False
+    )
+    # Код привязки: в базе — только HMAC кода, сам код видит координатор один раз
+    bot_link_code = models.CharField(max_length=64, blank=True, editable=False, db_index=True)
+    bot_link_code_expires = models.DateTimeField(null=True, blank=True, editable=False)
     city = models.CharField("город", max_length=150, blank=True)
     district = models.ForeignKey(
         "core.District", verbose_name="район", on_delete=models.PROTECT, null=True, blank=True
@@ -153,7 +158,8 @@ class Volunteer(BaseModel):
     guardian_phone = models.CharField("телефон представителя", max_length=20, blank=True)
     guardian_email = models.EmailField("email представителя", blank=True)
 
-    # Учётная запись волонтёра (бот, этап 7)
+    # Учётная запись волонтёра: создаётся при привязке бота, без пароля и входа в
+    # веб-интерфейс — нужна, чтобы действия через бота были подписаны автором
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         verbose_name="учётная запись",
@@ -169,7 +175,7 @@ class Volunteer(BaseModel):
 
     history = HistoricalRecords(
         history_id_field=models.UUIDField(default=uuid.uuid4),
-        excluded_fields=["search_name"],
+        excluded_fields=["search_name", "bot_link_code", "bot_link_code_expires"],
         verbose_name="история волонтёра",
     )
     objects = VolunteerQuerySet.as_manager()  # type: ignore[misc]
@@ -275,7 +281,7 @@ class VolunteerTraining(BaseModel):
 class VolunteerHours(BaseModel):
     """Часы, внесённые вручную, с комментарием (ФТ-В-07).
 
-    Часы по сменам считаются автоматически из назначений (модуль «Смены», этап 7).
+    Часы по сменам и визитам считаются автоматически из назначений (apps.shifts).
     """
 
     volunteer = models.ForeignKey(Volunteer, on_delete=models.PROTECT, related_name="manual_hours")

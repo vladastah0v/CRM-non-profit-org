@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}{% if shift %}Изменение смены{% else %}Новая смена{% endif %}{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация">
+    {% if shift %}<a href="{{ shift.get_absolute_url }}">← К смене</a>{% else %}<a href="{% url 'shifts:list' %}">← Все смены</a>{% endif %}
+  </nav>
+  <h1 class="mb-6">{% if shift %}Изменение смены{% else %}Новая смена{% endif %}</h1>
+
+  <form method="post" class="max-w-3xl space-y-4" novalidate>
+    {% csrf_token %}
+    {% include "partials/form_errors.html" %}
+
+    <fieldset class="card space-y-4">
+      <legend class="sr-only">Что и когда</legend>
+      <h2>Что и когда</h2>
+      <div class="grid gap-4 sm:grid-cols-2">
+        {% include "partials/field.html" with field=form.title %}
+        {% include "partials/field.html" with field=form.shift_type %}
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        {% include "partials/field.html" with field=form.starts_at %}
+        {% include "partials/field.html" with field=form.ends_at %}
+      </div>
+      {% if shift %}<p class="form-help">Если изменить время, записанные волонтёры получат сообщение в боте, а напоминания придут заново.</p>{% endif %}
+    </fieldset>
+
+    <fieldset class="card space-y-4">
+      <legend class="sr-only">Место</legend>
+      <h2>Место</h2>
+      <div class="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        {% include "partials/field.html" with field=form.address %}
+        {% include "partials/field.html" with field=form.district %}
+      </div>
+    </fieldset>
+
+    <fieldset class="card space-y-4">
+      <legend class="sr-only">Волонтёры</legend>
+      <h2>Волонтёры</h2>
+      <div class="grid gap-4 sm:grid-cols-2">
+        {% include "partials/field.html" with field=form.volunteers_needed %}
+        {% include "partials/field.html" with field=form.program %}
+      </div>
+      {% include "partials/checkbox_list.html" with field=form.skills %}
+      {% include "partials/field.html" with field=form.description %}
+      {% include "partials/checkbox.html" with field=form.allow_signup %}
+    </fieldset>
+
+    <div class="flex flex-wrap gap-3">
+      <button type="submit" class="btn btn-primary">{% if shift %}Сохранить{% else %}Создать смену{% endif %}</button>
+      <a href="{% if shift %}{{ shift.get_absolute_url }}{% else %}{% url 'shifts:list' %}{% endif %}" class="btn btn-secondary">Отмена</a>
+    </div>
+  </form>
+{% endblock %}

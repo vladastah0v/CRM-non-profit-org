@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Смены{% endblock %}
+
+{% block content %}
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1>Смены</h1>
+    {% if can_manage %}<a href="{% url 'shifts:create' %}" class="btn btn-primary">+ Новая смена</a>{% endif %}
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+    <aside>
+      {% with form=filter.form %}
+      <form method="get" action="{% url 'shifts:list' %}" class="card space-y-4" role="search" aria-label="Поиск и фильтры"
+            hx-get="{% url 'shifts:list' %}" hx-target="#shift-results" hx-push-url="true"
+            hx-trigger="submit, change, input changed delay:400ms from:#id_q" hx-indicator="#results-loading">
+        <div>
+          <label for="id_q" class="form-label">Название или место</label>
+          <input type="search" name="q" id="id_q" value="{{ form.q.value|default:'' }}" class="form-input" autocomplete="off">
+        </div>
+        {% include "partials/field.html" with field=form.period %}
+        <div class="grid grid-cols-2 gap-2">
+          {% include "partials/field.html" with field=form.date_from %}
+          {% include "partials/field.html" with field=form.date_to %}
+        </div>
+        {% include "partials/field.html" with field=form.shift_type %}
+        {% include "partials/field.html" with field=form.program %}
+        {% include "partials/field.html" with field=form.district %}
+        {% include "partials/field.html" with field=form.staffing %}
+        {% include "partials/checkbox.html" with field=form.cancelled %}
+        <div class="flex flex-wrap gap-2">
+          <button type="submit" class="btn btn-primary">Показать</button>
+          <a href="{% url 'shifts:list' %}?{{ reset_param }}=1" class="btn btn-secondary">Сбросить</a>
+        </div>
+      </form>
+      {% endwith %}
+    </aside>
+
+    <section id="shift-results" aria-live="polite">
+      {% include "shifts/_results.html" %}
+    </section>
+  </div>
+{% endblock %}

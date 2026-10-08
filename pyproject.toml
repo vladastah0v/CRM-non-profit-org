@@ -52,7 +52,7 @@ addopts = "-ra --strict-markers --ds=config.settings.test"
 filterwarnings = ["ignore::DeprecationWarning:celery.*"]
 
 [tool.coverage.run]
-source = ["apps"]
+source = ["apps", "bot"]
 omit = ["*/migrations/*", "*/tests/*", "*/admin.py"]
 
 [tool.coverage.report]

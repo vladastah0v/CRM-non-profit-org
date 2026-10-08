@@ -76,7 +76,7 @@ jobs:
           DJANGO_SECRET_KEY: ${{ github.run_id }}-ci-only-${{ github.sha }}-not-a-real-secret-key
           DJANGO_ALLOWED_HOSTS: crm.example.org
       - name: Аудит зависимостей
-        run: pip install pip-audit && pip-audit -r requirements/base.txt
+        run: pip install pip-audit && pip-audit -r requirements/base.txt -r requirements/bot.txt
 
   build:
     name: Сборка образа
@@ -91,5 +91,14 @@ jobs:
           target: app
           push: false
           tags: crm-nko:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Образ Telegram-бота
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: bot
+          push: false
+          tags: crm-nko-bot:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

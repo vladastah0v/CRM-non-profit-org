@@ -10,7 +10,10 @@ USE_X_FORWARDED_HOST = False
 TRUST_X_REAL_IP = True
 REST_FRAMEWORK["NUM_PROXIES"] = 1  # реальный IP для ограничения частоты запросов API
 SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=True)
-SECURE_REDIRECT_EXEMPT = [r"^healthz/$"]
+# Бот ходит в API напрямую по внутренней сети Docker (http://web:8000, без Nginx и TLS):
+# порт web наружу не публикуется, а снаружи Nginx путь /api/v1/bot/ не пропускает
+SECURE_REDIRECT_EXEMPT = [r"^healthz/$", r"^api/v1/bot/"]
+ALLOWED_HOSTS = [*ALLOWED_HOSTS, "web"]
 SECURE_HSTS_SECONDS = env.int("DJANGO_HSTS_SECONDS", default=31_536_000)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = False

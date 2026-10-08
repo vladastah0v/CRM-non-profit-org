@@ -17,6 +17,7 @@ from apps.accounts.roles import RoleCode, user_has_role
 from apps.consents.models import Consent
 from apps.interactions.models import Interaction, Task, TaskStatus
 from apps.requests.models import Assistance, RequestStatusChange
+from apps.shifts.models import AssignmentStatusChange
 
 from . import permissions
 from .filters import BeneficiaryFilter
@@ -249,7 +250,7 @@ def timeline(beneficiary: Beneficiary) -> list[TimelineEvent]:
 
 
 def _help_events(beneficiary: Beneficiary) -> list[TimelineEvent]:
-    """Заявки, помощь, взаимодействия и задачи (модули этапа 6)."""
+    """Заявки, помощь, взаимодействия, задачи (этап 6) и визиты волонтёров (этап 7)."""
     events: list[TimelineEvent] = []
     changes = RequestStatusChange.objects.filter(request__beneficiary=beneficiary).select_related(
         "request__assistance_type", "created_by"
@@ -302,4 +303,24 @@ def _help_events(beneficiary: Beneficiary) -> list[TimelineEvent]:
         if task.status != TaskStatus.OPEN and task.done_at:
             title = "Задача выполнена" if task.status == TaskStatus.DONE else "Задача отменена"
             events.append(TimelineEvent(task.done_at, title, task.text, task.assignee))
+
+    # Визиты волонтёров (ФТ-С-05)
+    visit_changes = AssignmentStatusChange.objects.filter(
+        assignment__beneficiary=beneficiary, assignment__is_archived=False
+    ).select_related("assignment__volunteer", "created_by")
+    for visit_change in visit_changes:
+        visit = visit_change.assignment
+        title = (
+            f"Визит волонтёра: {visit_change.get_to_status_display().lower()}"
+            if visit_change.from_status
+            else "Назначен визит волонтёра"
+        )
+        when = f"{timezone.localtime(visit.starts_at):%d.%m.%Y %H:%M}"
+        parts = [f"{visit.volunteer.full_name}, {when}", visit_change.comment]
+        if visit_change.via_bot:
+            parts.append("через бота")
+        author = None if visit_change.via_bot else visit_change.created_by
+        events.append(
+            TimelineEvent(visit_change.created_at, title, "; ".join(p for p in parts if p), author)
+        )
     return events

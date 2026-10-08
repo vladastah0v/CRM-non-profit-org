@@ -53,6 +53,7 @@ services:
     volumes:
       - media:/app/media
       - static:/app/staticfiles
+    networks: [default, bot]
 
   celery:
     <<: *app
@@ -62,6 +63,25 @@ services:
     <<: *app
     command: ["celery", "-A", "config", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
 
+  # Telegram-бот волонтёров (п. 7.2): запускается отдельно —
+  # docker compose --profile bot up -d bot. Получает только свои переменные (без ключей
+  # шифрования и пароля базы) и сидит в отдельной сети: видит web, но не db и redis.
+  bot:
+    build:
+      context: .
+      target: bot
+    image: crm-nko-bot:${APP_VERSION:-latest}
+    profiles: [bot]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      CRM_API_TOKEN: ${BOT_API_TOKEN:-}
+      CRM_API_URL: http://web:8000/api/v1/bot/
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks: [bot]
+    depends_on:
+      - web
+    restart: unless-stopped
+
   nginx:
     image: nginx:1.27-alpine
     volumes:
@@ -70,6 +90,10 @@ services:
     depends_on:
       - web
     restart: unless-stopped
+
+networks:
+  default:
+  bot:
 
 volumes:
   pgdata:

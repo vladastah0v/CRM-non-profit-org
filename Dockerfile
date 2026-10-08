@@ -21,7 +21,20 @@ COPY apps ./apps
 RUN tailwindcss -i static/src/main.css -o static/dist/main.css --minify
 
 # ---------------------------------------------------------------------------
-# 2. Приложение
+# 2. Telegram-бот: отдельный образ без Django, ходит только во внутренний API
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS bot
+ENV PYTHONDONTWRITEBYTECODE=1     PYTHONUNBUFFERED=1     PIP_NO_CACHE_DIR=1     PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN groupadd --gid 1000 bot && useradd --uid 1000 --gid bot --create-home bot
+WORKDIR /app
+COPY requirements/bot.txt ./requirements/bot.txt
+RUN pip install -r requirements/bot.txt
+COPY --chown=bot:bot bot ./bot
+USER bot
+CMD ["python", "-m", "bot"]
+
+# ---------------------------------------------------------------------------
+# 3. Приложение (последняя стадия — цель сборки по умолчанию)
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS app
 ENV PYTHONDONTWRITEBYTECODE=1 \
