@@ -7,6 +7,11 @@
     </nav>
 
     <div class="hidden items-center gap-3 xl:flex">
+      {% if is_admin or "coordinator" in user_roles or "curator" in user_roles %}
+        <a href="{% url 'core:search' %}" class="rounded-md p-2 text-slate-700 hover:bg-slate-100" aria-label="Поиск по ФИО и телефону" title="Поиск">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="m20 20-3.5-3.5"/></svg>
+        </a>
+      {% endif %}
       {% include "partials/notifications_bell.html" %}
       <a href="{% url 'accounts:password_change' %}" class="max-w-40 truncate text-sm text-slate-600 hover:text-slate-900"
          title="Сменить пароль">{{ user.full_name|default:user.username }}</a>
@@ -17,6 +22,11 @@
     </div>
 
     <div class="flex items-center gap-1 xl:hidden">
+      {% if is_admin or "coordinator" in user_roles or "curator" in user_roles %}
+        <a href="{% url 'core:search' %}" class="rounded-md p-2 text-slate-700 hover:bg-slate-100" aria-label="Поиск по ФИО и телефону" title="Поиск">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="m20 20-3.5-3.5"/></svg>
+        </a>
+      {% endif %}
       {% include "partials/notifications_bell.html" %}
       <button type="button" class="rounded-md p-2 text-slate-700 hover:bg-slate-100"
               @click="toggle" aria-label="Открыть меню" aria-controls="mobile-menu">

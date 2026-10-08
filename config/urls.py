@@ -3,6 +3,7 @@ from django.contrib import admin
 from django.urls import URLPattern, URLResolver, include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerSplitView
 
+from apps.beneficiaries.api import BeneficiaryIntakeView
 from apps.volunteers.api import VolunteerIntakeView
 
 api_v1: list[URLPattern | URLResolver] = [
@@ -10,6 +11,7 @@ api_v1: list[URLPattern | URLResolver] = [
     # Split-вариант не содержит встроенных скриптов — работает при строгом CSP
     path("docs/", SpectacularSwaggerSplitView.as_view(url_name="api-v1:schema"), name="docs"),
     path("intake/volunteer/", VolunteerIntakeView.as_view(), name="intake-volunteer"),
+    path("intake/beneficiary/", BeneficiaryIntakeView.as_view(), name="intake-beneficiary"),
     path("bot/", include("apps.shifts.api_urls")),
 ]
 
@@ -22,6 +24,8 @@ urlpatterns = [
     path("requests/", include("apps.requests.urls")),
     path("interactions/", include("apps.interactions.urls")),
     path("shifts/", include("apps.shifts.urls")),
+    path("reports/", include("apps.reports.urls")),
+    path("imports/", include("apps.imports.urls")),
     path("notifications/", include("apps.notifications.urls")),
     path("api/v1/", include((api_v1, "api-v1"))),
     path(settings.ADMIN_URL, admin.site.urls),

@@ -32,6 +32,7 @@ urlpatterns = [
         views.access_revoke,
         name="access_revoke",
     ),
+    path("<uuid:pk>/duplicate/", views.duplicate_resolve, name="duplicate_resolve"),
     path("<uuid:pk>/archive/", views.beneficiary_archive, name="archive"),
     path("<uuid:pk>/restore/", views.beneficiary_restore, name="restore"),
 ]

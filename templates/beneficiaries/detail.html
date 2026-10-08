@@ -13,6 +13,7 @@
         <span class="badge {{ b.status_badge }}">{{ b.get_status_display }}</span>
         {% if b.is_archived %}<span class="badge bg-slate-200 text-slate-700">в архиве</span>{% endif %}
         {% if card.full and b.is_minor %}<span class="badge bg-amber-100 text-amber-800">несовершеннолетний</span>{% endif %}
+        {% if card.full and b.is_possible_duplicate %}<span class="badge bg-red-100 text-red-800">возможный дубль</span>{% endif %}
       </div>
     </div>
     {% if card.full %}
@@ -26,15 +27,18 @@
             {% csrf_token %}
             <button type="submit" class="btn btn-secondary">В архив</button>
           </form>
-        {% else %}
+        {% elif not b.anonymized_at %}
           <form method="post" action="{% url 'beneficiaries:restore' b.pk %}">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">Вернуть из архива</button>
           </form>
         {% endif %}
+        {% if card.is_admin and not b.anonymized_at %}<a href="{% url 'consents:anonymize' 'beneficiary' b.pk %}" class="btn btn-secondary">Обезличить</a>{% endif %}
       </div>
     {% endif %}
   </div>
+
+  {% include "consents/_erasure_banner.html" with person=b kind="beneficiary" %}
 
   {% if not card.full %}
     {# Координатор: ограниченный набор полей «Ч (О)», матрица 2.2 #}
@@ -52,6 +56,43 @@
     {% include "requests/_card_section.html" %}
     {% include "shifts/_beneficiary_section.html" %}
   {% else %}
+    {% if b.is_possible_duplicate and card.is_admin %}
+      <section class="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900" aria-labelledby="dup-title">
+        <h2 id="dup-title" class="text-base text-red-900">Возможный дубль</h2>
+        {% if card.duplicates %}
+          <p class="mt-1">Похожие карточки — сравните и примите решение:</p>
+          <ul class="mt-2 space-y-1">
+            {% for m in card.duplicates %}
+              <li>
+                <a href="{% url 'beneficiaries:detail' m.person.pk %}" target="_blank" rel="noopener" class="font-medium underline">{{ m.person.full_name }}</a>,
+                {{ m.person.birth_date|date:"d.m.Y" }}{% if m.person.phone %}, {{ m.person.phone|phone }}{% endif %},
+                {{ m.person.get_status_display|lower }}{% if m.person.is_archived %}, в архиве{% endif %}
+                — совпадает: <strong>{{ m.reasons|join:", " }}</strong>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="mt-1">Похожих карточек больше нет. Пометку можно снять.</p>
+        {% endif %}
+        {% if not b.is_archived %}
+          <div class="mt-3 flex flex-wrap gap-2">
+            <form method="post" action="{% url 'beneficiaries:duplicate_resolve' b.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="decision" value="different">
+              <button type="submit" class="btn btn-secondary">Это другой человек</button>
+            </form>
+            {% if card.duplicates %}
+              <form method="post" action="{% url 'beneficiaries:duplicate_resolve' b.pk %}"
+                    data-confirm="Перевести эту карточку в архив как дубль? Перед этим перенесите нужные сведения в основную карточку.">
+                {% csrf_token %}
+                <input type="hidden" name="decision" value="same">
+                <button type="submit" class="btn btn-danger">Это тот же человек — в архив</button>
+              </form>
+            {% endif %}
+          </div>
+        {% endif %}
+      </section>
+    {% endif %}
     {% if card.consent_missing %}
       <div class="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900" role="alert">
         Случай в работе, но действующего согласия нет. Изменения карточки заблокированы (ФТ-Д-02):

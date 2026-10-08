@@ -30,7 +30,12 @@ from .models import (
     CuratorAccess,
     RelatedPerson,
 )
-from .services import allowed_transitions, has_valid_consent, in_work_problems
+from .services import (
+    allowed_transitions,
+    duplicates_of,
+    has_valid_consent,
+    in_work_problems,
+)
 
 TIMELINE_LIMIT = 100
 
@@ -85,6 +90,7 @@ class BeneficiaryCard:
     transitions: list[str] = field(default_factory=list)
     in_work_problems: list[str] = field(default_factory=list)
     consent_missing: bool = False
+    duplicates: list[Any] = field(default_factory=list)
 
     @property
     def show_in_work_hint(self) -> bool:
@@ -115,6 +121,10 @@ def beneficiary_card(user: Any, beneficiary: Beneficiary) -> BeneficiaryCard:
         in_work_problems=in_work_problems(beneficiary),
         consent_missing=beneficiary.status == CaseStatus.IN_WORK
         and not has_valid_consent(beneficiary),
+        # Совпадения показываются только администратору: он видит все карточки
+        duplicates=duplicates_of(beneficiary)
+        if beneficiary.is_possible_duplicate and permissions.is_admin(user)
+        else [],
     )
 
 

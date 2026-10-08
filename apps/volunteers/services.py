@@ -523,6 +523,8 @@ def archive_volunteer(volunteer: Volunteer, *, request: HttpRequest | None = Non
 
 
 def restore_volunteer(volunteer: Volunteer, *, request: HttpRequest | None = None) -> None:
+    if volunteer.anonymized_at is not None:
+        raise ValidationError("Данные обезличены — карточку нельзя вернуть из архива.")
     if volunteer.is_archived:
         volunteer.restore()
         log_event(AuditAction.RESTORE, request=request, obj=volunteer)

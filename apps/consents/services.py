@@ -86,9 +86,9 @@ def revoke_consent(
     note: str = "",
     request: HttpRequest | None = None,
 ) -> Consent:
-    """ФТ-Д-03: отзыв фиксируется с датой, администраторы получают задачу на обезличивание.
-
-    Само обезличивание выполняет администратор (ФТ-А-04, этап 8).
+    """ФТ-Д-03: отзыв фиксируется с датой. Если действующих согласий у человека не
+    осталось — создаётся запрос на обезличивание со сроком 30 дней, администраторы
+    получают уведомление. Обезличивает администратор (ФТ-А-04, apps/consents/anonymize.py).
     """
     if consent.revoked_on is not None:
         raise ValidationError("Согласие уже отозвано.")
@@ -107,11 +107,32 @@ def revoke_consent(
         extra={"revoked": True},
     )
     subject: Any = consent.volunteer or consent.beneficiary
+    if _request_erasure(consent, subject):
+        due = subject.erasure_deadline
+        body = (
+            "Действующих согласий не осталось: прекратите обработку и обезличьте данные "
+            f"до {due:%d.%m.%Y}."
+        )
+    else:
+        body = "Действуют другие согласия — проверьте, какие данные можно обрабатывать дальше."
     notify(
         users_with_role(RoleCode.ADMIN),
         NotificationKind.CONSENT_REVOKED,
         "Отозвано согласие на обработку данных",
-        body="Прекратите обработку и запустите обезличивание данных человека.",
+        body=body,
         url=subject.get_absolute_url(),
     )
     return consent
+
+
+def _request_erasure(consent: Consent, subject: Any) -> bool:
+    """Запрос на обезличивание, если у человека не осталось действующих согласий."""
+    if subject is None or subject.anonymized_at is not None:
+        return False
+    card = {"volunteer": subject} if consent.volunteer_id else {"beneficiary": subject}
+    if Consent.objects.valid_on().filter(**card).exists():
+        return False
+    if subject.erasure_requested_on is None:
+        subject.erasure_requested_on = timezone.localdate()
+        subject.save(update_fields=["erasure_requested_on"])
+    return True

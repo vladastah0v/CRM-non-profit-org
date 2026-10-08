@@ -190,7 +190,8 @@ def test_ft_d_03_revocation_pauses_case_and_notifies_admin(make_beneficiary, mak
     last_change = b.status_changes.first()
     assert last_change is not None and "отозвано согласие" in last_change.comment
     note = Notification.objects.get(recipient=admin, kind=NotificationKind.CONSENT_REVOKED)
-    assert note.url == b.get_absolute_url() and "обезличивание" in note.body
+    assert note.url == b.get_absolute_url() and "обезличьте данные до" in note.body
+    assert b.erasure_requested_on == TODAY()  # запущена процедура обезличивания
 
 
 def test_revocation_keeps_work_if_other_consent_valid(make_beneficiary):

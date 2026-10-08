@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Импорт данных{% endblock %}
+
+{% block content %}
+  <h1 class="mb-2">Импорт данных</h1>
+  <p class="mb-6 max-w-3xl text-slate-600">
+    Загрузите Excel или CSV по шаблону. Сначала файл проверяется: вы увидите, сколько записей будет
+    создано и обновлено, ошибки по строкам и найденные дубли. В базу ничего не попадёт, пока вы не
+    нажмёте «Импортировать».
+  </p>
+
+  <div class="grid gap-4 lg:grid-cols-[24rem_minmax(0,1fr)]">
+    <form method="post" enctype="multipart/form-data" class="card space-y-4 self-start" novalidate>
+      {% csrf_token %}
+      <h2>Новый импорт</h2>
+      {% include "partials/form_errors.html" %}
+      {% include "partials/field.html" with field=form.kind %}
+      {% include "partials/field.html" with field=form.file %}
+      <button type="submit" class="btn btn-primary">Загрузить и проверить</button>
+      <div class="border-t border-slate-100 pt-3 text-sm">
+        <p class="mb-1 font-medium">Шаблоны</p>
+        <ul class="space-y-1">
+          {% for kind, label, columns in kinds %}
+            <li><a href="{% url 'imports:template' kind %}">{{ label }}</a> <span class="text-slate-500">— {{ columns|length }} колонок</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+    </form>
+
+    <section class="card" aria-labelledby="jobs-title">
+      <h2 id="jobs-title" class="mb-3">Последние импорты</h2>
+      {% if jobs %}
+        <ul class="divide-y divide-slate-100 text-sm">
+          {% for job in jobs %}
+            <li class="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span><a href="{{ job.get_absolute_url }}" class="font-medium">{{ job.get_kind_display }}</a> · {{ job.created_at|date:"d.m.Y H:i" }}{% if job.created_by %} · {{ job.created_by }}{% endif %}</span>
+              <span class="badge {{ job.status_badge }}">{{ job.get_status_display }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-sm text-slate-600">Импортов ещё не было.</p>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

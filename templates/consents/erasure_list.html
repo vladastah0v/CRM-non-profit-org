@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Обезличивание данных{% endblock %}
+
+{% block content %}
+  <h1 class="mb-2">Обезличивание данных</h1>
+  <p class="mb-6 max-w-3xl text-slate-600">
+    Запрос появляется, когда человек отзывает последнее действующее согласие. Данные нужно
+    обезличить в течение 30 дней (ч. 5 ст. 21 152-ФЗ) или снять запрос, если у фонда есть иное
+    законное основание. По заявлению человека обезличить можно из его карточки — кнопка «Обезличить».
+  </p>
+
+  <section class="card mb-4" aria-labelledby="pending-title">
+    <h2 id="pending-title" class="mb-3">Ждут обезличивания{% if pending %} <span class="badge bg-red-100 text-red-800">{{ pending|length }}</span>{% endif %}</h2>
+    {% if pending %}
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead><tr><th scope="col">Карточка</th><th scope="col">Кто</th><th scope="col">Запрошено</th><th scope="col">Срок</th><th scope="col"><span class="sr-only">Действия</span></th></tr></thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for item in pending %}
+              {% with p=item.person %}
+                <tr class="{% if item.deadline < today %}bg-red-50{% endif %}">
+                  <td><a href="{{ p.get_absolute_url }}">{{ p.full_name }}</a></td>
+                  <td>{% if item.kind == "volunteer" %}Волонтёр{% else %}Подопечный{% endif %}</td>
+                  <td class="whitespace-nowrap">{{ p.erasure_requested_on|date:"d.m.Y" }}</td>
+                  <td class="whitespace-nowrap {% if item.deadline < today %}font-medium text-red-700{% endif %}">{{ item.deadline|date:"d.m.Y" }}{% if item.deadline < today %} — просрочено{% endif %}</td>
+                  <td class="whitespace-nowrap text-right">
+                    <a href="{% url 'consents:anonymize' item.kind p.pk %}">Обезличить</a>
+                    <a href="{% url 'consents:dismiss_erasure' item.kind p.pk %}" class="ml-3">Снять запрос</a>
+                  </td>
+                </tr>
+              {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-sm text-slate-600">Запросов нет.</p>
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="done-title">
+    <h2 id="done-title" class="mb-3">Недавно обезличены</h2>
+    {% if done %}
+      <ul class="divide-y divide-slate-100 text-sm">
+        {% for p in done %}<li class="py-2"><a href="{{ p.get_absolute_url }}">{{ p.full_name }}</a> · {{ p.anonymized_at|date:"d.m.Y H:i" }}</li>{% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-slate-600">Пока никого.</p>
+    {% endif %}
+  </section>
+{% endblock %}

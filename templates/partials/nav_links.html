@@ -4,4 +4,5 @@
 <a href="{% url 'requests:list' %}" class="{{ link_class }}">Заявки</a>
 <a href="{% url 'shifts:list' %}" class="{{ link_class }}">Смены</a>
 <a href="{% url 'interactions:tasks' %}" class="{{ link_class }}">Задачи</a>{% endif %}
+{% if is_admin or "coordinator" in user_roles or "curator" in user_roles or "analyst" in user_roles %}<a href="{% url 'reports:index' %}" class="{{ link_class }}">Отчёты</a>{% endif %}
 {% if is_admin %}<a href="{% url 'admin:index' %}" class="{{ link_class }}">Администрирование</a>{% endif %}

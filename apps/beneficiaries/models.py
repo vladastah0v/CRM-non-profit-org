@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import uuid
 from typing import Any, Self
 
@@ -14,7 +15,7 @@ from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
 from apps.accounts.roles import RoleCode, user_has_role
-from apps.core.dates import ADULT_AGE, full_years
+from apps.core.dates import ADULT_AGE, erasure_deadline, full_years
 from apps.core.fields import EncryptedTextField
 from apps.core.models import ArchivableQuerySet, BaseModel
 from apps.core.normalize import normalize_name
@@ -123,6 +124,18 @@ class Beneficiary(BaseModel):
     )
     outcome = models.TextField("итог", blank=True, editable=False)
 
+    is_possible_duplicate = models.BooleanField(
+        "возможный дубль",
+        default=False,
+        help_text="Обращение с сайта совпало с существующей карточкой — проверьте вручную.",
+    )
+    # Обезличивание (ФТ-А-04, ФТ-Д-03): запрос — после отзыва согласия или по заявлению;
+    # обезличенная карточка остаётся в архиве для статистики
+    erasure_requested_on = models.DateField(
+        "запрошено обезличивание", null=True, blank=True, editable=False
+    )
+    anonymized_at = models.DateTimeField("обезличено", null=True, blank=True, editable=False)
+
     # Нормализованное ФИО: поиск и проверка дублей по триграммам (п. 4.4)
     search_name = models.CharField(max_length=500, editable=False, default="")
 
@@ -185,6 +198,11 @@ class Beneficiary(BaseModel):
     @property
     def is_minor(self) -> bool:
         return self.age < ADULT_AGE
+
+    @property
+    def erasure_deadline(self) -> datetime.date | None:
+        """Крайний срок обезличивания по запросу (ФТ-Д-03)."""
+        return erasure_deadline(self.erasure_requested_on)
 
     @property
     def status_badge(self) -> str:

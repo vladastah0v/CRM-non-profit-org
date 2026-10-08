@@ -398,7 +398,11 @@ def volunteer_archive(request: HttpRequest, pk: str) -> HttpResponse:
 @require_POST
 def volunteer_restore(request: HttpRequest, pk: str) -> HttpResponse:
     volunteer = selectors.get_managed_volunteer(request.user, pk)
-    services.restore_volunteer(volunteer, request=request)
+    try:
+        services.restore_volunteer(volunteer, request=request)
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+        return redirect("volunteers:detail", pk=volunteer.pk)
     messages.success(request, "Карточка возвращена из архива.")
     return redirect("volunteers:detail", pk=volunteer.pk)
 

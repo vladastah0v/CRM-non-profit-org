@@ -348,3 +348,22 @@ def archive_assistance(assistance: Assistance, *, request: HttpRequest | None = 
         raise ValidationError("Это единственный факт помощи по выполненной заявке.")
     assistance.archive()
     log_event(AuditAction.ARCHIVE, request=request, obj=assistance)
+
+
+@transaction.atomic
+def import_assistance(
+    beneficiary: Beneficiary, data: dict[str, Any], *, request: HttpRequest | None = None
+) -> Assistance:
+    """Факт помощи из импорта истории (ФТ-А-05, п. 7.3). Те же проверки, что при
+    регистрации, но случай может быть уже закрыт: переносится прошлая помощь."""
+    if beneficiary.is_archived:
+        raise ValidationError("Карточка подопечного в архиве.")
+    clean = _clean_assistance(beneficiary, data, None)
+    assistance = Assistance.objects.create(beneficiary=beneficiary, **clean)
+    log_event(
+        AuditAction.CREATE,
+        request=request,
+        obj=assistance,
+        extra={"beneficiary": str(beneficiary.pk), "channel": "import"},
+    )
+    return assistance

@@ -1,7 +1,11 @@
 {% load crm %}
 <div class="mb-3 flex items-center justify-between gap-3 text-sm text-slate-600">
   <p>Найдено: <strong class="text-slate-900">{{ page.paginator.count }}</strong></p>
-  <span id="results-loading" class="htmx-indicator" role="status">Загрузка…</span>
+  <span class="flex items-center gap-3">
+    <span id="results-loading" class="htmx-indicator" role="status">Загрузка…</span>
+    {% if page.paginator.count %}<a href="{% url 'reports:export' 'requests' %}?{{ request.GET.urlencode }}" class="btn btn-secondary py-1"
+       title="Выгрузить список с текущими фильтрами в Excel">Excel</a>{% endif %}
+  </span>
 </div>
 
 {% if page.object_list %}

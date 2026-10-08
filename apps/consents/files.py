@@ -71,10 +71,14 @@ def validate_upload(upload: UploadedFile, allowed: frozenset[str] | None = None)
 
 def store_attachment(upload: UploadedFile, allowed: frozenset[str] | None = None) -> Attachment:
     content_type = validate_upload(upload, allowed)
-    data = upload.read()
+    return store_bytes(upload.read(), name=upload.name or "file", content_type=content_type)
+
+
+def store_bytes(data: bytes, *, name: str, content_type: str) -> Attachment:
+    """Зашифровать и сохранить уже проверенное содержимое (тип проверяет вызывающий код)."""
     attachment = Attachment(
         id=uuid.uuid4(),
-        original_name=(upload.name or "file")[:255],
+        original_name=name[:255],
         content_type=content_type,
         size=len(data),
         sha256=hashlib.sha256(data).hexdigest(),
@@ -94,6 +98,15 @@ def read_attachment(attachment: Attachment) -> bytes:
     if hashlib.sha256(data).hexdigest() != attachment.sha256:
         raise crypto.DecryptionError("Хэш файла не совпадает")
     return data
+
+
+def delete_attachment(attachment: Attachment) -> None:
+    """Физически удалить файл и запись о нём — только обезличивание (ФТ-А-04) и очистка
+    загруженных для импорта файлов. Файл удаляется после фиксации транзакции."""
+    storage = _storage()
+    key = attachment.storage_key
+    Attachment._base_manager.filter(pk=attachment.pk).delete()
+    transaction.on_commit(lambda: storage.delete(key))
 
 
 def _object_key(attachment_id: uuid.UUID) -> str:

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Отчёт по программе{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{% url 'reports:index' %}">← Отчёты</a></nav>
+  <h1 class="mb-4">Отчёт по программе</h1>
+  {% include "reports/_period_form.html" %}
+
+  {% if report %}
+    <p class="mb-3 text-sm text-slate-600">{{ report.program }} · {{ report.period.label }} · {{ report.scope }}</p>
+    <dl class="mb-4 grid gap-4 sm:grid-cols-3 {% if report.volunteer_hours is not None %}lg:grid-cols-5{% endif %}">
+      <div class="card"><dt class="text-sm text-slate-500">Уникальных подопечных</dt><dd class="text-3xl font-semibold">{{ report.beneficiaries }}</dd></div>
+      <div class="card"><dt class="text-sm text-slate-500">Фактов помощи</dt><dd class="text-3xl font-semibold">{{ report.facts }}</dd></div>
+      <div class="card"><dt class="text-sm text-slate-500">Сумма, ₽</dt><dd class="text-3xl font-semibold">{{ report.amount|floatformat:"2g" }}</dd></div>
+      {% if report.volunteer_hours is not None %}
+        <div class="card"><dt class="text-sm text-slate-500">Часы волонтёров</dt><dd class="text-3xl font-semibold">{{ report.volunteer_hours|floatformat:"-2" }}</dd></div>
+        <div class="card"><dt class="text-sm text-slate-500">Волонтёров участвовало</dt><dd class="text-3xl font-semibold">{{ report.volunteers }}</dd></div>
+      {% endif %}
+    </dl>
+
+    <div class="grid gap-4 lg:grid-cols-3">
+      <section class="card lg:col-span-2" aria-labelledby="types-title">
+        <h2 id="types-title" class="mb-3">По типам помощи</h2>
+        {% if report.by_type %}
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead><tr><th scope="col">Тип помощи</th><th scope="col" class="text-right">Фактов</th><th scope="col" class="text-right">Количество</th><th scope="col" class="text-right">Сумма, ₽</th></tr></thead>
+              <tbody class="divide-y divide-slate-100">
+                {% for r in report.by_type %}
+                  <tr>
+                    <td>{{ r.name }}</td>
+                    <td class="text-right">{{ r.facts }}</td>
+                    <td class="whitespace-nowrap text-right">{% if r.quantity is not None %}{{ r.quantity|floatformat:"-2" }} {{ r.unit }}{% else %}—{% endif %}</td>
+                    <td class="whitespace-nowrap text-right">{{ r.amount|floatformat:"2g" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-sm text-slate-600">За период помощь не регистрировалась.</p>
+        {% endif %}
+      </section>
+      <section class="card" aria-labelledby="cat-title">
+        <h2 id="cat-title" class="mb-3">По категориям подопечных</h2>
+        <ul class="divide-y divide-slate-100 text-sm">
+          {% for name, n in report.by_category %}<li class="flex justify-between py-2"><span>{{ name }}</span><span class="font-medium">{{ n }}</span></li>{% empty %}<li class="py-2 text-slate-600">—</li>{% endfor %}
+        </ul>
+      </section>
+    </div>
+
+    <section class="mt-4 text-sm text-slate-600" aria-labelledby="rules-title">
+      <h2 id="rules-title" class="mb-1 text-base">Как считается</h2>
+      <ul class="list-disc space-y-1 pl-5">
+        <li>Факты оказанной помощи с датой оказания в периоде (включая обе даты) и выбранной программой; записи в архиве не учитываются.</li>
+        <li>Уникальные подопечные — получившие хотя бы одну помощь; каждый считается один раз, в том числе обезличенные.</li>
+        <li>Количество суммируется отдельно по каждой единице измерения.</li>
+        {% if report.volunteer_hours is not None %}<li>Часы волонтёров — отметки «Пришёл» на сменах и визитах этой программы, начавшихся в периоде, и часы, внесённые вручную с этой программой.</li>{% endif %}
+      </ul>
+    </section>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Отчёт по волонтёрам{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{% url 'reports:index' %}">← Отчёты</a></nav>
+  <h1 class="mb-4">Отчёт по волонтёрам</h1>
+  {% include "reports/_period_form.html" %}
+
+  {% if report %}
+    <p class="mb-3 text-sm text-slate-600">{{ report.period.label }}</p>
+    <dl class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="card"><dt class="text-sm text-slate-500">Активных на конец периода</dt><dd class="text-3xl font-semibold">{{ report.active_at_end }}</dd><dd class="text-xs text-slate-500">на начало — {{ report.active_at_start }}</dd></div>
+      <div class="card"><dt class="text-sm text-slate-500">Новых</dt><dd class="text-3xl font-semibold">{{ report.newly_active }}</dd><dd class="text-xs text-slate-500">стали активными впервые; анкет — {{ report.new_applications }}</dd></div>
+      <div class="card"><dt class="text-sm text-slate-500">Выбыли</dt><dd class="text-3xl font-semibold">{{ report.left }}</dd></div>
+      <div class="card"><dt class="text-sm text-slate-500">Отработано часов</dt><dd class="text-3xl font-semibold">{{ report.total_hours|floatformat:"-2" }}</dd><dd class="text-xs text-slate-500">работали {{ report.working_volunteers }} чел.</dd></div>
+    </dl>
+
+    <div class="grid gap-4 lg:grid-cols-2">
+      <section class="card" aria-labelledby="work-title">
+        <h2 id="work-title" class="mb-3">Смены и часы</h2>
+        <dl class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          <dt class="text-slate-500">Проведено смен</dt><dd>{{ report.shifts_held }}</dd>
+          <dt class="text-slate-500">Отметок «пришёл»</dt><dd>{{ report.attended }}</dd>
+          <dt class="text-slate-500">Неявок</dt><dd>{{ report.no_show }}{% if report.no_show_rate is not None %} ({{ report.no_show_rate }}%){% endif %}</dd>
+          <dt class="text-slate-500">Часы на сменах</dt><dd>{{ report.shift_hours|floatformat:"-2" }}</dd>
+          <dt class="text-slate-500">Часы на визитах</dt><dd>{{ report.visit_hours|floatformat:"-2" }}</dd>
+          <dt class="text-slate-500">Часы вручную</dt><dd>{{ report.manual_hours|floatformat:"-2" }}</dd>
+        </dl>
+      </section>
+      <section class="card" aria-labelledby="prog-title">
+        <h2 id="prog-title" class="mb-3">Часы по программам</h2>
+        <ul class="divide-y divide-slate-100 text-sm">
+          {% for name, hours in report.by_program %}<li class="flex justify-between py-2"><span>{{ name }}</span><span class="font-medium">{{ hours|floatformat:"-2" }}</span></li>{% empty %}<li class="py-2 text-slate-600">Часов за период нет.</li>{% endfor %}
+        </ul>
+      </section>
+    </div>
+
+    {% if report.with_names %}
+      <section class="card mt-4" aria-labelledby="people-title">
+        <h2 id="people-title" class="mb-3">По волонтёрам</h2>
+        {% if report.rows %}
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead><tr><th scope="col">ФИО</th><th scope="col" class="text-right">Смены, ч</th><th scope="col" class="text-right">Визиты, ч</th><th scope="col" class="text-right">Вручную, ч</th><th scope="col" class="text-right">Всего, ч</th><th scope="col" class="text-right">Пришёл</th><th scope="col" class="text-right">Неявки</th></tr></thead>
+              <tbody class="divide-y divide-slate-100">
+                {% for r in report.rows %}
+                  <tr><td>{{ r.name }}</td><td class="text-right">{{ r.shift_hours|floatformat:"-2" }}</td><td class="text-right">{{ r.visit_hours|floatformat:"-2" }}</td><td class="text-right">{{ r.manual_hours|floatformat:"-2" }}</td><td class="text-right font-medium">{{ r.total|floatformat:"-2" }}</td><td class="text-right">{{ r.attended }}</td><td class="text-right {% if r.no_show %}text-red-700{% endif %}">{{ r.no_show }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-sm text-slate-600">За период нет отметок и часов.</p>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    <section class="mt-4 text-sm text-slate-600" aria-labelledby="rules-title">
+      <h2 id="rules-title" class="mb-1 text-base">Как считается</h2>
+      <ul class="list-disc space-y-1 pl-5">
+        <li>Активные — статус «Активен» на начало первого и на конец последнего дня периода, по журналу смены статусов.</li>
+        <li>Новые — впервые получили статус «Активен» в периоде; анкеты — карточки, созданные в периоде.</li>
+        <li>Выбывшие — переведены в «Выбыл» в периоде. Обезличенные учитываются, архивные дубли — нет.</li>
+        <li>Часы — отметки «Пришёл» на сменах и визитах, начавшихся в периоде, и часы, внесённые вручную с датой в периоде.</li>
+      </ul>
+    </section>
+  {% endif %}
+{% endblock %}

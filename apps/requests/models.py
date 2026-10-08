@@ -194,7 +194,7 @@ class AssistanceQuerySet(ArchivableQuerySet):
     def visible_to(self, user: Any) -> Self:
         """Матрица 2.2, «Оказанная помощь»: администратор П, координатор Ч, куратор С.
 
-        Аналитику — только агрегаты, через отчёты (этап 8), не сами записи.
+        Аналитику — только агрегаты, через отчёты (apps.reports), не сами записи.
         """
         if user_has_role(user, RoleCode.ADMIN):
             return self.all()

@@ -4,6 +4,7 @@ from django import forms
 
 from apps.core.forms import DateInput, StyledFormMixin
 
+from .anonymize import BASIS_CHOICES
 from .models import ConsentKind, ConsentSigner
 
 
@@ -59,3 +60,26 @@ class ConsentForm(StyledFormMixin, forms.Form):
 class RevokeConsentForm(StyledFormMixin, forms.Form):
     revoked_on = forms.DateField(label="Дата отзыва", widget=DateInput())
     note = forms.CharField(label="Комментарий", max_length=500, required=False)
+
+
+class AnonymizeForm(StyledFormMixin, forms.Form):
+    """ФТ-А-04: основание и документ; подтверждение, что действие необратимо."""
+
+    basis = forms.ChoiceField(label="Основание", choices=BASIS_CHOICES, widget=forms.RadioSelect)
+    document = forms.CharField(
+        label="Документ-основание",
+        max_length=100,
+        help_text="Номер и дата заявления или отзыва, например «вх. 15 от 08.10.2026». Без ФИО.",
+    )
+    confirm = forms.BooleanField(
+        label="Понимаю: данные будут удалены безвозвратно, восстановить их нельзя",
+        required=True,
+    )
+
+
+class DismissErasureForm(StyledFormMixin, forms.Form):
+    reason = forms.CharField(
+        label="Почему данные сохраняются",
+        max_length=200,
+        help_text="Иное законное основание: договор, требование закона и т. п. Без ФИО.",
+    )

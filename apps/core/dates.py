@@ -14,3 +14,11 @@ def full_years(birth_date: datetime.date, day: datetime.date | None = None) -> i
 
 def is_minor(birth_date: datetime.date | None) -> bool:
     return birth_date is not None and full_years(birth_date) < ADULT_AGE
+
+
+# ч. 5 ст. 21 152-ФЗ: после отзыва согласия данные уничтожаются в срок до 30 дней
+ERASURE_DEADLINE = datetime.timedelta(days=30)
+
+
+def erasure_deadline(requested_on: datetime.date | None) -> datetime.date | None:
+    return None if requested_on is None else requested_on + ERASURE_DEADLINE

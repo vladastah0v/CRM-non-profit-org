@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Отчёты{% endblock %}
+
+{% block content %}
+  <h1 class="mb-2">Отчёты</h1>
+  <p class="mb-6 text-slate-600">Период по умолчанию — прошлый квартал. Любой отчёт можно выгрузить в Excel; каждая выгрузка записывается в журнал аудита.</p>
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    {% if can_program %}
+      <a href="{% url 'reports:program' %}" class="card block text-slate-900 transition hover:border-brand-500 hover:text-slate-900">
+        <h2 class="mb-1">По программе</h2>
+        <p class="text-sm text-slate-600">Уникальные подопечные, факты помощи по типам, сумма в рублях{% if not program_all %} — по вашим подопечным{% endif %}.</p>
+      </a>
+    {% endif %}
+    {% if can_volunteers %}
+      <a href="{% url 'reports:volunteers' %}" class="card block text-slate-900 transition hover:border-brand-500 hover:text-slate-900">
+        <h2 class="mb-1">По волонтёрам</h2>
+        <p class="text-sm text-slate-600">Активные, новые, выбывшие, отработанные часы и неявки.</p>
+      </a>
+      <a href="{% url 'reports:funnel' %}" class="card block text-slate-900 transition hover:border-brand-500 hover:text-slate-900">
+        <h2 class="mb-1">Воронка волонтёров</h2>
+        <p class="text-sm text-slate-600">Сколько анкет дошло до каждого статуса и конверсия между статусами.</p>
+      </a>
+    {% endif %}
+  </div>
+  <p class="form-help mt-6">Как считается каждый показатель — в описании под отчётом. Выгрузки списков — кнопкой «Excel» в списках волонтёров, подопечных, заявок и смен.</p>
+{% endblock %}

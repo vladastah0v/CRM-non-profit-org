@@ -512,6 +512,35 @@ def beneficiary_archive(request: HttpRequest, pk: str) -> HttpResponse:
 @require_POST
 def beneficiary_restore(request: HttpRequest, pk: str) -> HttpResponse:
     beneficiary = selectors.get_managed_beneficiary(request.user, pk)
-    services.restore_beneficiary(beneficiary, request=request)
-    messages.success(request, "Карточка возвращена из архива.")
+    try:
+        services.restore_beneficiary(beneficiary, request=request)
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+    else:
+        messages.success(request, "Карточка возвращена из архива.")
+    return _detail(beneficiary)
+
+
+@login_required
+@require_POST
+def duplicate_resolve(request: HttpRequest, pk: str) -> HttpResponse:
+    """ФТ-П-06: решение по пометке «возможный дубль» (обращение с сайта) — администратор."""
+    if not permissions.is_admin(request.user):
+        raise PermissionDenied
+    beneficiary = selectors.get_managed_beneficiary(request.user, pk)
+    decision = request.POST.get("decision")
+    if decision not in {"different", "same"}:
+        messages.error(request, "Не выбрано решение по возможному дублю.")
+        return _detail(beneficiary)
+    try:
+        services.resolve_duplicate(beneficiary, same_person=decision == "same", request=request)
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+    else:
+        messages.success(
+            request,
+            "Карточка переведена в архив как дубль."
+            if decision == "same"
+            else "Пометка «возможный дубль» снята.",
+        )
     return _detail(beneficiary)

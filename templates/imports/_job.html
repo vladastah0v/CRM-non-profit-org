@@ -1,0 +1,76 @@
+{# Состояние импорта. Пока идёт проверка или импорт — обновляется раз в 3 секунды и
+   перестаёт, как только работа закончена (опрос не продлевает сессию бесконечно). #}
+<div id="import-job" aria-live="polite"
+     {% if job.in_progress %}hx-get="{{ job.get_absolute_url }}" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  <p class="mb-4"><span class="badge {{ job.status_badge }}">{{ job.get_status_display }}</span>
+    {% if job.in_progress %}<span class="ml-2 text-sm text-slate-600">Страница обновится сама.</span>{% endif %}</p>
+
+  {% if job.status == "failed" %}
+    <div class="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900" role="alert">{{ job.failure }}</div>
+  {% endif %}
+
+  {% if summary %}
+    <dl class="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div class="card"><dt class="text-sm text-slate-500">Строк в файле</dt><dd class="text-2xl font-semibold">{{ summary.rows }}</dd></div>
+      <div class="card"><dt class="text-sm text-slate-500">{% if job.status == "done" %}Создано{% else %}Будет создано{% endif %}</dt><dd class="text-2xl font-semibold">{{ summary.create }}</dd></div>
+      <div class="card"><dt class="text-sm text-slate-500">{% if job.status == "done" %}Обновлено{% else %}Будет обновлено{% endif %}</dt><dd class="text-2xl font-semibold">{{ summary.update }}</dd></div>
+      <div class="card"><dt class="text-sm text-slate-500">Пропущено</dt><dd class="text-2xl font-semibold">{{ summary.skipped }}</dd></div>
+      <div class="card"><dt class="text-sm text-slate-500">Возможных дублей</dt><dd class="text-2xl font-semibold {% if summary.duplicates %}text-amber-700{% endif %}">{{ summary.duplicates }}</dd></div>
+      <div class="card"><dt class="text-sm text-slate-500">Строк с ошибками</dt><dd class="text-2xl font-semibold {% if summary.errors %}text-red-700{% endif %}">{{ summary.errors }}</dd></div>
+    </dl>
+  {% endif %}
+
+  {% if job.status == "ready" %}
+    <div class="mb-4 flex flex-wrap items-center gap-3">
+      {% if summary.create or summary.update %}
+        <form method="post" action="{% url 'imports:confirm' job.pk %}"
+              data-confirm="Импортировать строки без ошибок? Строки с ошибками будут пропущены.">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary">Импортировать</button>
+        </form>
+      {% endif %}
+      <form method="post" action="{% url 'imports:cancel' job.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary">Отменить и удалить файл</button>
+      </form>
+      {% if summary.errors %}<p class="text-sm text-slate-600">Строки с ошибками будут пропущены — исправьте их в файле и загрузите его снова.</p>{% endif %}
+    </div>
+  {% elif job.status == "checking" %}
+    <form method="post" action="{% url 'imports:cancel' job.pk %}" class="mb-4">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-secondary">Отменить</button>
+    </form>
+  {% endif %}
+
+  {% if job.errors or job.duplicates %}
+    <div class="grid gap-4 lg:grid-cols-2">
+      {% if job.errors %}
+        <section class="card" aria-labelledby="errors-title">
+          <div class="mb-3 flex items-center justify-between gap-2">
+            <h2 id="errors-title">Ошибки</h2>
+            <a href="{% url 'imports:errors' job.pk %}" class="text-sm">Скачать отчёт (Excel)</a>
+          </div>
+          <div class="max-h-96 overflow-y-auto">
+            <table class="table">
+              <thead><tr><th scope="col">Строка</th><th scope="col">Колонка</th><th scope="col">Что не так</th></tr></thead>
+              <tbody class="divide-y divide-slate-100">
+                {% for e in job.errors|slice:":200" %}<tr><td>{{ e.row }}</td><td>{{ e.column|default:"—" }}</td><td>{{ e.message }}</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if job.errors|length > 200 %}<p class="form-help mt-2">Показаны первые 200 — полный список в отчёте.</p>{% endif %}
+        </section>
+      {% endif %}
+      {% if job.duplicates %}
+        <section class="card" aria-labelledby="dup-title">
+          <h2 id="dup-title" class="mb-3">Возможные дубли</h2>
+          <ul class="max-h-96 divide-y divide-slate-100 overflow-y-auto text-sm">
+            {% for d in job.duplicates %}
+              <li class="py-2">Строка {{ d.row }}: {{ d.message }}{% if d.url %} <a href="{{ d.url }}" target="_blank" rel="noopener">Похожая карточка</a>{% endif %}</li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>

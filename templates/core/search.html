@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load crm %}
+
+{% block title %}Поиск{% endblock %}
+
+{% block content %}
+  <h1 class="mb-4">Поиск</h1>
+  {% if not can_search %}
+    <p class="text-slate-600">Вашей роли поиск по карточкам не нужен: данные доступны в отчётах.</p>
+  {% else %}
+    <form method="get" class="card mb-4 flex flex-wrap items-end gap-3" role="search" aria-label="Поиск по карточкам">
+      <div class="min-w-64 flex-1">
+        <label for="search-q" class="form-label">ФИО или телефон</label>
+        <input type="search" name="q" id="search-q" value="{{ query }}" class="form-input" autocomplete="off" autofocus
+               placeholder="Например: Иванова Мария или 916 123">
+      </div>
+      <button type="submit" class="btn btn-primary">Найти</button>
+    </form>
+
+    {% if too_short %}
+      <p class="text-sm text-slate-600">Введите хотя бы 2 символа.</p>
+    {% elif query %}
+      <p class="mb-3 text-sm text-slate-600">Найдено: <strong class="text-slate-900">{{ found }}</strong> — в карточках, доступных вам. Архивные не показываются.</p>
+      <div class="grid gap-4 lg:grid-cols-2">
+        {% for g in groups %}
+          <section class="card" aria-labelledby="group-{{ forloop.counter }}">
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <h2 id="group-{{ forloop.counter }}">{{ g.title }} <span class="text-base font-normal text-slate-500">{{ g.total }}</span></h2>
+              {% if g.total > g.items|length %}<a href="{{ g.list_url }}?q={{ query|urlencode }}" class="text-sm">Все в списке →</a>{% endif %}
+            </div>
+            {% if g.items %}
+              <ul class="divide-y divide-slate-100 text-sm">
+                {% for item in g.items %}
+                  <li class="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <a href="{{ item.get_absolute_url }}" class="font-medium">{{ item.full_name }}</a>
+                    <span class="flex items-center gap-2 text-slate-600">
+                      {% if item.phone %}{{ item.phone|phone }}{% endif %}
+                      <span class="badge {{ item.status_badge }}">{{ item.get_status_display }}</span>
+                    </span>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="text-sm text-slate-600">Ничего не найдено.</p>
+            {% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}

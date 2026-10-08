@@ -1,0 +1,14 @@
+{# Форма периода отчёта. Контекст: form; по желанию — поле program #}
+<form method="get" class="card mb-4 flex flex-wrap items-end gap-3" aria-label="Период отчёта">
+  {% include "partials/form_errors.html" %}
+  <div class="w-40">{% include "partials/field.html" with field=form.date_from %}</div>
+  <div class="w-40">{% include "partials/field.html" with field=form.date_to %}</div>
+  {% if form.program %}<div class="min-w-56 flex-1">{% include "partials/field.html" with field=form.program %}</div>{% endif %}
+  <div class="flex flex-wrap gap-2">
+    <button type="submit" class="btn btn-primary">Показать</button>
+    {% if report %}
+      <a href="?date_from={{ form.cleaned_data.date_from|date:'Y-m-d' }}&amp;date_to={{ form.cleaned_data.date_to|date:'Y-m-d' }}{% if form.program %}&amp;program={{ form.cleaned_data.program|urlencode }}{% endif %}&amp;format=xlsx"
+         class="btn btn-secondary">Скачать Excel</a>
+    {% endif %}
+  </div>
+</form>

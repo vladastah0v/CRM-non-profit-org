@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block title %}{{ job.full_name }}{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{% url 'imports:list' %}">← Импорт данных</a></nav>
+  <h1>{{ job.full_name }}</h1>
+  <p class="mb-6 mt-1 text-slate-600">Загружен {{ job.created_at|date:"d.m.Y H:i" }}{% if job.created_by %}, {{ job.created_by }}{% endif %} · {{ job.file_format|upper }}</p>
+  {% include "imports/_job.html" %}
+{% endblock %}

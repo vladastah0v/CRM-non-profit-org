@@ -6,6 +6,7 @@ from __future__ import annotations
 import datetime
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any
 
 from django.core.exceptions import ValidationError
@@ -19,14 +20,20 @@ from apps.accounts.roles import RoleCode, user_has_role
 from apps.audit.models import AuditAction
 from apps.audit.services import log_event
 from apps.consents.files import store_attachment
-from apps.consents.models import Consent, ConsentKind, ConsentSigner
-from apps.consents.services import revoke_consent
+from apps.consents.models import Consent, ConsentChannel, ConsentKind, ConsentSigner
+from apps.consents.services import create_beneficiary_consent, revoke_consent
 from apps.core.context import get_current_user
 from apps.core.duplicates import PersonMatch, find_person_duplicates
-from apps.core.models import CaseClosingReason, Program
-from apps.core.normalize import normalize_email, normalize_phone
+from apps.core.models import (
+    BeneficiaryCategory,
+    BeneficiarySource,
+    CaseClosingReason,
+    Program,
+)
+from apps.core.normalize import normalize_email, normalize_name, normalize_phone
+from apps.interactions.models import Interaction, InteractionKind
 from apps.notifications.models import NotificationKind
-from apps.notifications.services import notify
+from apps.notifications.services import notify, users_with_role
 from apps.shifts.services import cancel_for_beneficiary
 
 from .models import (
@@ -585,6 +592,129 @@ def archive_beneficiary(beneficiary: Beneficiary, *, request: HttpRequest | None
 
 
 def restore_beneficiary(beneficiary: Beneficiary, *, request: HttpRequest | None = None) -> None:
+    if beneficiary.anonymized_at is not None:
+        raise ValidationError("Данные обезличены — карточку нельзя вернуть из архива.")
     if beneficiary.is_archived:
         beneficiary.restore()
         log_event(AuditAction.RESTORE, request=request, obj=beneficiary)
+
+
+# ---------------------------------------------------------------------------
+# Обращение с сайта (п. 7.1) и возможные дубли (ФТ-П-06)
+# ---------------------------------------------------------------------------
+INTAKE_SOURCE_NAME = "Сайт фонда"
+
+
+@dataclass(frozen=True)
+class IntakeApplication:
+    data: dict[str, Any]
+    category_name: str = ""
+    need: str = ""
+    representative_name: str = ""
+    representative_relation: str = ""
+    representative_phone: str = ""
+
+
+def duplicates_of(beneficiary: Beneficiary) -> list[PersonMatch]:
+    return find_duplicates(
+        last_name=beneficiary.last_name,
+        first_name=beneficiary.first_name,
+        middle_name=beneficiary.middle_name,
+        birth_date=beneficiary.birth_date,
+        phone=beneficiary.phone,
+        exclude_pk=beneficiary.pk,
+    )
+
+
+@transaction.atomic
+def create_from_intake(
+    application: IntakeApplication, *, request: HttpRequest | None = None
+) -> Beneficiary:
+    """Обращение с сайта: карточка «Новый» без куратора, согласие с отметкой времени,
+    проверка дублей, уведомление администраторам — они назначают куратора (п. 2.3).
+    Карточка создаётся всегда; при совпадении — с пометкой «возможный дубль»."""
+    beneficiary = Beneficiary(**_normalized(application.data))
+    if beneficiary.birth_date is None:
+        raise ValidationError({"birth_date": ["Обязательное поле."]})
+    if application.category_name:
+        wanted = normalize_name(application.category_name)
+        categories = [
+            c for c in BeneficiaryCategory.objects.active() if normalize_name(c.name) == wanted
+        ]
+        beneficiary.category = categories[0] if len(categories) == 1 else None
+    beneficiary.source, _ = BeneficiarySource.objects.get_or_create(name=INTAKE_SOURCE_NAME)
+    beneficiary.is_possible_duplicate = bool(duplicates_of(beneficiary))
+    beneficiary.save()
+    _record_status(beneficiary, "", S.NEW)
+
+    minor = beneficiary.is_minor
+    if application.representative_name:
+        RelatedPerson.objects.create(
+            beneficiary=beneficiary,
+            full_name=" ".join(application.representative_name.split()),
+            relation=application.representative_relation.strip() or "законный представитель",
+            phone=application.representative_phone,
+            is_legal_representative=minor,
+        )
+    # Отметка о согласии в форме сайта: факт и время сохраняются (п. 7.1)
+    create_beneficiary_consent(
+        beneficiary,
+        kind=ConsentKind.GENERAL,
+        signed_on=timezone.localdate(),
+        signer=ConsentSigner.REPRESENTATIVE if minor else ConsentSigner.SUBJECT,
+        signer_name=application.representative_name if minor else "",
+        channel=ConsentChannel.WEBSITE,
+        request=request,
+    )
+    need = application.need.strip()
+    if need:
+        Interaction.objects.create(
+            beneficiary=beneficiary,
+            kind=InteractionKind.MESSAGE,
+            happened_at=timezone.now(),
+            text=f"Обращение с сайта: {need}",
+        )
+    log_event(
+        AuditAction.CREATE,
+        request=request,
+        obj=beneficiary,
+        fields=sorted(application.data),
+        extra={"channel": "website", "possible_duplicate": beneficiary.is_possible_duplicate},
+    )
+    notify(
+        users_with_role(RoleCode.ADMIN),
+        NotificationKind.NEW_BENEFICIARY_APPLICATION,
+        "Новое обращение подопечного с сайта",
+        body=(
+            "Назначьте куратора. Возможный дубль — проверьте совпадения."
+            if beneficiary.is_possible_duplicate
+            else "Назначьте куратора."
+        ),
+        url=beneficiary.get_absolute_url(),
+    )
+    return beneficiary
+
+
+@transaction.atomic
+def resolve_duplicate(
+    beneficiary: Beneficiary, *, same_person: bool, request: HttpRequest | None = None
+) -> None:
+    """Решение администратора по пометке «возможный дубль»: другой человек — пометка
+    снимается; тот же — карточка в архив (сведения переносятся в основную вручную)."""
+    ensure_editable(beneficiary)
+    if not beneficiary.is_possible_duplicate:
+        raise ValidationError("Карточка не помечена как возможный дубль.")
+    if same_person:
+        archive_beneficiary(beneficiary, request=request)
+        decision = "same_person"
+    else:
+        beneficiary.is_possible_duplicate = False
+        beneficiary.save(update_fields=["is_possible_duplicate"])
+        decision = "different_person"
+    log_event(
+        AuditAction.UPDATE,
+        request=request,
+        obj=beneficiary,
+        fields=["is_possible_duplicate"],
+        extra={"duplicate": decision},
+    )

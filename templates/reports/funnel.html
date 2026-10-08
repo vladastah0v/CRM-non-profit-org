@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Воронка волонтёров{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{% url 'reports:index' %}">← Отчёты</a></nav>
+  <h1 class="mb-4">Воронка волонтёров</h1>
+  {% include "reports/_period_form.html" %}
+
+  {% if report %}
+    <p class="mb-3 text-sm text-slate-600">Анкеты, поступившие за {{ report.period.label }}: <strong class="text-slate-900">{{ report.cohort }}</strong></p>
+    <div class="grid gap-4 lg:grid-cols-3">
+      <section class="card lg:col-span-2" aria-labelledby="funnel-title">
+        <h2 id="funnel-title" class="mb-3">Воронка</h2>
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead><tr><th scope="col">Статус</th><th scope="col" class="text-right">Дошли</th><th scope="col" class="text-right">От предыдущего шага</th><th scope="col" class="text-right">От анкет</th></tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              {% for s in report.steps %}
+                <tr>
+                  <td>{{ s.label }}</td>
+                  <td class="text-right font-medium">{{ s.reached }}</td>
+                  <td class="text-right">{% if s.from_previous is not None %}{{ s.from_previous }}%{% else %}—{% endif %}</td>
+                  <td class="text-right">{% if s.from_start is not None %}{{ s.from_start }}%{% else %}—{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="mt-3 text-sm text-slate-600">
+          Выбыли, не став активными: <strong class="text-slate-900">{{ report.left_before_active }}</strong>.
+          От анкеты до статуса «Активен» в среднем: <strong class="text-slate-900">{% if report.average_days_to_active is not None %}{{ report.average_days_to_active }} дн.{% else %}—{% endif %}</strong>
+        </p>
+      </section>
+      <section class="card" aria-labelledby="now-title">
+        <h2 id="now-title" class="mb-3">Сейчас по статусам</h2>
+        <ul class="divide-y divide-slate-100 text-sm">
+          {% for label, n in report.current %}<li class="flex justify-between py-2"><span>{{ label }}</span><span class="font-medium">{{ n }}</span></li>{% endfor %}
+        </ul>
+        <p class="form-help mt-2">Все действующие карточки, без учёта периода.</p>
+      </section>
+    </div>
+    <section class="mt-4 text-sm text-slate-600" aria-labelledby="rules-title">
+      <h2 id="rules-title" class="mb-1 text-base">Как считается</h2>
+      <p>В воронку попадают анкеты, созданные в периоде. Шаг считается пройденным, если волонтёр хоть раз был переведён в этот статус — даже если потом выбыл.</p>
+    </section>
+  {% endif %}
+{% endblock %}

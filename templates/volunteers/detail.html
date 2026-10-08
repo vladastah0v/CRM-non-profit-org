@@ -25,15 +25,18 @@
             {% csrf_token %}
             <button type="submit" class="btn btn-secondary">В архив</button>
           </form>
-        {% else %}
+        {% elif not v.anonymized_at %}
           <form method="post" action="{% url 'volunteers:restore' v.pk %}">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">Вернуть из архива</button>
           </form>
         {% endif %}
+        {% if is_admin and not v.anonymized_at %}<a href="{% url 'consents:anonymize' 'volunteer' v.pk %}" class="btn btn-secondary">Обезличить</a>{% endif %}
       </div>
     {% endif %}
   </div>
+
+  {% include "consents/_erasure_banner.html" with person=v kind="volunteer" %}
 
   {% if not card.full %}
     {# Куратор: ограниченный набор полей «Ч (О)», матрица 2.2 #}
