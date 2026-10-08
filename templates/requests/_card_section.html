@@ -1,0 +1,59 @@
+{# Заявки и оказанная помощь в карточке подопечного. Контекст: help, b #}
+{% load crm %}
+<div class="mt-4 grid gap-4 lg:grid-cols-2">
+  <section class="card" aria-labelledby="requests-title">
+    <div class="mb-3 flex items-center justify-between gap-2">
+      <h2 id="requests-title">Заявки{% if help.open_count %} <span class="badge bg-sky-100 text-sky-800">открыто: {{ help.open_count }}</span>{% endif %}</h2>
+      {% if help.manages and not b.is_archived and b.status != "closed" %}<a href="{% url 'requests:create' b.pk %}" class="text-sm">+ Новая заявка</a>{% endif %}
+    </div>
+    {% if help.requests %}
+      <ul class="divide-y divide-slate-100 text-sm">
+        {% for r in help.requests %}
+          <li class="py-2 {% if r.is_overdue %}-mx-2 rounded bg-red-50 px-2{% endif %}">
+            <p>
+              <a href="{{ r.get_absolute_url }}" class="font-medium">{{ r.assistance_type }}</a>
+              <span class="badge ml-1 {{ r.status_badge }}">{{ r.get_status_display }}</span>
+              {% if r.urgency != "normal" %}<span class="badge ml-1 {{ r.urgency_badge }}">{{ r.get_urgency_display|lower }}</span>{% endif %}
+            </p>
+            <p class="text-slate-600">{% if r.due_date %}до {{ r.due_date|date:"d.m.Y" }}{% if r.is_overdue %} · <span class="font-medium text-red-700">просрочена</span>{% endif %} · {% endif %}{{ r.responsible|default:"ответственный не назначен" }}</p>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-slate-600">Заявок нет.</p>
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="assistance-title">
+    <div class="mb-3 flex items-center justify-between gap-2">
+      <h2 id="assistance-title">Оказанная помощь</h2>
+      {% if help.manages and not b.is_archived and b.status != "closed" %}<a href="{% url 'requests:assistance_add' b.pk %}" class="text-sm">+ Зарегистрировать</a>{% endif %}
+    </div>
+    {% if help.assistance %}
+      {% if help.total_amount %}<p class="mb-2 text-sm text-slate-600">Всего на сумму: <strong class="text-slate-900">{{ help.total_amount|floatformat:"2g" }} ₽</strong></p>{% endif %}
+      <ul class="divide-y divide-slate-100 text-sm">
+        {% for a in help.assistance %}
+          <li class="py-2">
+            <p><span class="font-medium">{{ a.assistance_type }}</span> <span class="text-slate-500">· {{ a.provided_on|date:"d.m.Y" }}</span></p>
+            <p class="text-slate-600">
+              {% if a.quantity is not None %}{{ a.quantity|floatformat:"-2" }} {{ a.unit }}{% endif %}{% if a.quantity is not None and a.amount is not None %} · {% endif %}{% if a.amount is not None %}{{ a.amount|floatformat:"2g" }} ₽{% endif %}
+              · {{ a.executor }}{% if a.program %} · {{ a.program }}{% endif %}
+            </p>
+            {% if a.comment %}<p class="text-slate-600">{{ a.comment }}</p>{% endif %}
+            {% if help.manages and not b.is_archived %}
+              <div class="mt-1 flex gap-3">
+                <a href="{% url 'requests:assistance_edit' a.pk %}">Изменить</a>
+                <form method="post" action="{% url 'requests:assistance_archive' a.pk %}" data-confirm="Перевести запись о помощи в архив?">
+                  {% csrf_token %}
+                  <button type="submit" class="text-red-700 hover:text-red-800">В архив</button>
+                </form>
+              </div>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-slate-600">Помощь ещё не регистрировалась.</p>
+    {% endif %}
+  </section>
+</div>

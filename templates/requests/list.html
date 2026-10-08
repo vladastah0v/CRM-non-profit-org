@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Заявки{% endblock %}
+
+{% block content %}
+  <h1 class="mb-4">Заявки</h1>
+
+  <div class="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+    <aside>
+      {% with form=filter.form %}
+      <form method="get" action="{% url 'requests:list' %}" class="card space-y-4" role="search" aria-label="Поиск и фильтры"
+            hx-get="{% url 'requests:list' %}" hx-target="#request-results" hx-push-url="true"
+            hx-trigger="submit, change, input changed delay:400ms from:#id_q" hx-indicator="#results-loading">
+        <div>
+          <label for="id_q" class="form-label">Подопечный</label>
+          <input type="search" name="q" id="id_q" value="{{ form.q.value|default:'' }}" class="form-input"
+                 placeholder="ФИО" autocomplete="off">
+        </div>
+        {% include "partials/field.html" with field=form.scope %}
+        {% include "partials/field.html" with field=form.status %}
+        {% include "partials/checkbox.html" with field=form.overdue %}
+        {% include "partials/field.html" with field=form.urgency %}
+        {% include "partials/field.html" with field=form.assistance_type %}
+        {% include "partials/field.html" with field=form.responsible %}
+        {% include "partials/field.html" with field=form.sort %}
+        <div class="flex flex-wrap gap-2">
+          <button type="submit" class="btn btn-primary">Показать</button>
+          <a href="{% url 'requests:list' %}?{{ reset_param }}=1" class="btn btn-secondary">Сбросить</a>
+        </div>
+        <p class="form-help">Новая заявка создаётся из карточки подопечного.</p>
+      </form>
+      {% endwith %}
+    </aside>
+
+    <section id="request-results" aria-live="polite">
+      {% include "requests/_results.html" %}
+    </section>
+  </div>
+{% endblock %}

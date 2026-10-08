@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Заявка: {{ r.assistance_type }}{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация">
+    <a href="{% url 'requests:list' %}">← Заявки</a>
+    {% if can_open_card %} · <a href="{{ r.beneficiary.get_absolute_url }}">Карточка подопечного</a>{% endif %}
+  </nav>
+
+  <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h1>{{ r.assistance_type }}</h1>
+      <p class="mt-1 text-slate-600">{{ r.beneficiary.full_name }}</p>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <span class="badge {{ r.status_badge }}">{{ r.get_status_display }}</span>
+        {% if r.urgency != "normal" %}<span class="badge {{ r.urgency_badge }}">{{ r.get_urgency_display|lower }}</span>{% endif %}
+        {% if r.is_overdue %}<span class="badge bg-red-600 text-white">просрочена</span>{% endif %}
+        {% if r.is_archived %}<span class="badge bg-slate-200 text-slate-700">в архиве</span>{% endif %}
+      </div>
+    </div>
+    {% if manages and not r.is_archived %}
+      <div class="flex flex-wrap gap-2">
+        {% if r.is_open %}
+          <a href="{% url 'requests:edit' r.pk %}" class="btn btn-secondary">Изменить</a>
+          <a href="{% url 'requests:assistance_add' r.beneficiary_id %}?request={{ r.pk }}" class="btn btn-secondary">Зарегистрировать помощь</a>
+        {% endif %}
+        {% if transitions %}<a href="{% url 'requests:status' r.pk %}" class="btn btn-primary">Сменить статус</a>{% endif %}
+        {% if is_admin %}
+          <form method="post" action="{% url 'requests:archive' r.pk %}" data-confirm="Перевести заявку в архив?">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary">В архив</button>
+          </form>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-3">
+    <section class="card lg:col-span-2" aria-labelledby="req-title">
+      <h2 id="req-title" class="mb-3">Заявка</h2>
+      <dl class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <div class="sm:col-span-2"><dt class="text-sm text-slate-500">Описание</dt><dd class="whitespace-pre-line">{{ r.description }}</dd></div>
+        <div><dt class="text-sm text-slate-500">Желаемая дата</dt><dd class="{% if r.is_overdue %}font-medium text-red-700{% endif %}">{{ r.due_date|date:"d.m.Y"|default:"не указана" }}</dd></div>
+        <div><dt class="text-sm text-slate-500">Ответственный</dt><dd>{{ r.responsible|default:"не назначен" }}</dd></div>
+        <div><dt class="text-sm text-slate-500">Создана</dt><dd>{{ r.created_at|date:"d.m.Y H:i" }}{% if r.created_by %}, {{ r.created_by }}{% endif %}</dd></div>
+        {% if r.completed_at %}<div><dt class="text-sm text-slate-500">Выполнена</dt><dd>{{ r.completed_at|date:"d.m.Y H:i" }}</dd></div>{% endif %}
+        {% if r.resolution_reason %}<div class="sm:col-span-2"><dt class="text-sm text-slate-500">Причина</dt><dd>{{ r.resolution_reason }}</dd></div>{% endif %}
+      </dl>
+    </section>
+
+    <section class="card" aria-labelledby="history-title">
+      <h2 id="history-title" class="mb-3">История</h2>
+      <ol class="divide-y divide-slate-100 text-sm">
+        {% for ch in history %}
+          <li class="py-2">
+            <span class="text-slate-500">{{ ch.created_at|date:"d.m.Y H:i" }}</span> ·
+            {% if ch.from_status %}{{ ch.get_from_status_display }} → {% endif %}<span class="font-medium">{{ ch.get_to_status_display }}</span>
+            {% if ch.created_by %}<span class="text-slate-500"> · {{ ch.created_by }}</span>{% endif %}
+            {% if ch.comment %}<br><span class="text-slate-600">{{ ch.comment }}</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    </section>
+  </div>
+
+  <section class="card mt-4" aria-labelledby="assist-title">
+    <h2 id="assist-title" class="mb-3">Оказанная помощь по заявке</h2>
+    {% if assistance %}
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead><tr><th scope="col">Дата</th><th scope="col">Что</th><th scope="col">Количество / сумма</th><th scope="col">Исполнитель</th><th scope="col">Программа</th></tr></thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for a in assistance %}
+              <tr>
+                <td class="whitespace-nowrap">{{ a.provided_on|date:"d.m.Y" }}</td>
+                <td>{{ a.assistance_type }}{% if a.comment %}<br><span class="text-xs text-slate-500">{{ a.comment }}</span>{% endif %}</td>
+                <td class="whitespace-nowrap">{% if a.quantity is not None %}{{ a.quantity|floatformat:"-2" }} {{ a.unit }}{% endif %}{% if a.amount is not None %}{% if a.quantity is not None %}<br>{% endif %}{{ a.amount|floatformat:"2g" }} ₽{% endif %}</td>
+                <td>{{ a.executor }}</td>
+                <td>{{ a.program|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-sm text-slate-600">Помощь по заявке ещё не регистрировалась.</p>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -19,6 +19,7 @@ from apps.consents.models import Consent
 from apps.consents.services import create_volunteer_consent, revoke_consent
 from apps.core.list_filters import RESET_PARAM, restore_or_save
 from apps.core.pages import action_page, apply_service_errors
+from apps.interactions.selectors import card_activity
 
 from . import permissions, selectors, services
 from .filters import SAVED_PARAMS
@@ -111,7 +112,13 @@ def volunteer_detail(request: HttpRequest, pk: str) -> HttpResponse:
     return render(
         request,
         "volunteers/detail.html",
-        {"v": volunteer, "card": card, "photo_url": photo_url, "scan_urls": scan_urls},
+        {
+            "v": volunteer,
+            "card": card,
+            "photo_url": photo_url,
+            "scan_urls": scan_urls,
+            "activity": card_activity(request.user, volunteer),
+        },
     )
 
 

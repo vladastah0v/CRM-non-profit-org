@@ -48,6 +48,8 @@
       </dl>
       <p class="form-help mt-4">Показан ограниченный набор данных. Полная карточка — у куратора случая.</p>
     </section>
+    {# Заявки и помощь координатору — только чтение (матрица 2.2, «Ч») #}
+    {% include "requests/_card_section.html" %}
   {% else %}
     {% if card.consent_missing %}
       <div class="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900" role="alert">
@@ -113,6 +115,8 @@
       </section>
     </div>
 
+    {% include "requests/_card_section.html" %}
+
     <section class="card mt-4" aria-labelledby="consents-title">
       <div class="mb-3 flex items-center justify-between gap-2">
         <h2 id="consents-title">Согласия на обработку данных</h2>
@@ -148,6 +152,8 @@
       {% endif %}
     </section>
 
+    {% include "interactions/_card_section.html" with card=b %}
+
     <section class="card mt-4" aria-labelledby="timeline-title">
       <h2 id="timeline-title" class="mb-3">История</h2>
       {% if card.timeline %}
@@ -163,7 +169,6 @@
       {% else %}
         <p class="text-sm text-slate-600">Событий пока нет.</p>
       {% endif %}
-      <p class="form-help mt-2">Заявки, оказанная помощь и взаимодействия появятся здесь с модулем «Заявки и помощь».</p>
     </section>
   {% endif %}
 {% endblock %}

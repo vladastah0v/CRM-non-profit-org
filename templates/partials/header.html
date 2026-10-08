@@ -2,20 +2,21 @@
   <div class="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
     <a href="{% url 'core:home' %}" class="text-base font-semibold text-slate-900 hover:text-slate-900">CRM НКО</a>
 
-    <nav class="hidden items-center gap-1 md:flex" aria-label="Основное меню">
+    <nav class="hidden items-center gap-1 lg:flex" aria-label="Основное меню">
       {% include "partials/nav_links.html" with link_class="rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900" %}
     </nav>
 
-    <div class="hidden items-center gap-3 md:flex">
+    <div class="hidden items-center gap-3 lg:flex">
       {% include "partials/notifications_bell.html" %}
-      <span class="text-sm text-slate-600">{{ user.full_name|default:user.username }}</span>
+      <a href="{% url 'accounts:password_change' %}" class="max-w-40 truncate text-sm text-slate-600 hover:text-slate-900"
+         title="Сменить пароль">{{ user.full_name|default:user.username }}</a>
       <form method="post" action="{% url 'accounts:logout' %}">
         {% csrf_token %}
         <button type="submit" class="btn btn-secondary">Выйти</button>
       </form>
     </div>
 
-    <div class="flex items-center gap-1 md:hidden">
+    <div class="flex items-center gap-1 lg:hidden">
       {% include "partials/notifications_bell.html" %}
       <button type="button" class="rounded-md p-2 text-slate-700 hover:bg-slate-100"
               @click="toggle" aria-label="Открыть меню" aria-controls="mobile-menu">
@@ -26,9 +27,10 @@
     </div>
   </div>
 
-  <nav id="mobile-menu" class="border-t border-slate-200 px-4 pb-3 md:hidden" x-show="open" x-cloak aria-label="Мобильное меню">
+  <nav id="mobile-menu" class="border-t border-slate-200 px-4 pb-3 lg:hidden" x-show="open" x-cloak aria-label="Мобильное меню">
     <div class="flex flex-col py-2">
       {% include "partials/nav_links.html" with link_class="rounded-md px-3 py-2 text-base text-slate-700 hover:bg-slate-100" %}
+      <a href="{% url 'accounts:password_change' %}" class="rounded-md px-3 py-2 text-base text-slate-700 hover:bg-slate-100">Сменить пароль</a>
     </div>
     <div class="flex items-center justify-between border-t border-slate-200 pt-3">
       <span class="text-sm text-slate-600">{{ user.full_name|default:user.username }}</span>

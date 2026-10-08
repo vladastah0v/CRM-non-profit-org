@@ -15,6 +15,8 @@ from django.utils import timezone
 
 from apps.accounts.roles import RoleCode, user_has_role
 from apps.consents.models import Consent
+from apps.interactions.models import Interaction, Task, TaskStatus
+from apps.requests.models import Assistance, RequestStatusChange
 
 from . import permissions
 from .filters import BeneficiaryFilter
@@ -241,5 +243,63 @@ def timeline(beneficiary: Beneficiary) -> list[TimelineEvent]:
                 )
             )
 
+    events += _help_events(beneficiary)
     events.sort(key=lambda event: event.at, reverse=True)
     return events[:TIMELINE_LIMIT]
+
+
+def _help_events(beneficiary: Beneficiary) -> list[TimelineEvent]:
+    """Заявки, помощь, взаимодействия и задачи (модули этапа 6)."""
+    events: list[TimelineEvent] = []
+    changes = RequestStatusChange.objects.filter(request__beneficiary=beneficiary).select_related(
+        "request__assistance_type", "created_by"
+    )
+    for change in changes:
+        name = str(change.request.assistance_type)
+        title = (
+            f"Заявка: {change.get_from_status_display()} → {change.get_to_status_display()}"
+            if change.from_status
+            else "Создана заявка"
+        )
+        details = "; ".join(p for p in (name, change.comment) if p)
+        events.append(TimelineEvent(change.created_at, title, details, change.created_by))
+
+    for assistance in Assistance.objects.filter(
+        beneficiary=beneficiary, is_archived=False
+    ).select_related("assistance_type", "created_by"):
+        events.append(
+            TimelineEvent(
+                assistance.created_at,
+                "Оказана помощь",
+                f"{assistance.assistance_type}, {assistance.provided_on:%d.%m.%Y}",
+                assistance.created_by,
+            )
+        )
+
+    for interaction in Interaction.objects.filter(
+        beneficiary=beneficiary, is_archived=False
+    ).select_related("created_by"):
+        events.append(
+            TimelineEvent(
+                interaction.happened_at,
+                interaction.get_kind_display(),
+                interaction.text[:200],
+                interaction.created_by,
+            )
+        )
+
+    for task in Task.objects.filter(beneficiary=beneficiary, is_archived=False).select_related(
+        "created_by", "assignee"
+    ):
+        events.append(
+            TimelineEvent(
+                task.created_at,
+                "Поставлена задача",
+                f"{task.text} (до {task.due_date:%d.%m.%Y})",
+                task.created_by,
+            )
+        )
+        if task.status != TaskStatus.OPEN and task.done_at:
+            title = "Задача выполнена" if task.status == TaskStatus.DONE else "Задача отменена"
+            events.append(TimelineEvent(task.done_at, title, task.text, task.assignee))
+    return events

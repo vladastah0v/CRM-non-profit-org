@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import environ
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -47,6 +48,8 @@ LOCAL_APPS = [
     "apps.notifications",
     "apps.volunteers",
     "apps.beneficiaries",
+    "apps.requests",
+    "apps.interactions",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -113,7 +116,17 @@ CELERY_TASK_IGNORE_RESULT = True
 CELERY_TIMEZONE = env("TIME_ZONE", default="Europe/Moscow")
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
-CELERY_BEAT_SCHEDULE: dict[str, dict] = {}
+# Расписание — по часовому поясу фонда (CELERY_TIMEZONE), утром рабочего дня
+CELERY_BEAT_SCHEDULE: dict[str, dict] = {
+    "request-deadline-reminders": {
+        "task": "requests.send_deadline_reminders",
+        "schedule": crontab(hour=8, minute=0),
+    },
+    "task-reminders": {
+        "task": "interactions.send_task_reminders",
+        "schedule": crontab(hour=8, minute=5),
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Пользователи и пароли (НФТ-ИБ-03)

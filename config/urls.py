@@ -18,6 +18,8 @@ urlpatterns = [
     path("", include("apps.consents.urls")),
     path("volunteers/", include("apps.volunteers.urls")),
     path("beneficiaries/", include("apps.beneficiaries.urls")),
+    path("requests/", include("apps.requests.urls")),
+    path("interactions/", include("apps.interactions.urls")),
     path("notifications/", include("apps.notifications.urls")),
     path("api/v1/", include((api_v1, "api-v1"))),
     path(settings.ADMIN_URL, admin.site.urls),

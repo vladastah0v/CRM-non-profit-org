@@ -1,0 +1,47 @@
+{% load crm %}
+<div class="mb-3 flex items-center justify-between gap-3 text-sm text-slate-600">
+  <p>Найдено: <strong class="text-slate-900">{{ page.paginator.count }}</strong></p>
+  <span id="results-loading" class="htmx-indicator" role="status">Загрузка…</span>
+</div>
+
+{% if page.object_list %}
+  <ul class="space-y-2">
+    {% for r in page.object_list %}
+      <li class="card p-3 sm:p-4 {% if r.is_overdue %}border-red-300 bg-red-50{% endif %}">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <a href="{{ r.get_absolute_url }}" class="font-medium">{{ r.assistance_type }}</a>
+            <span class="text-slate-600">— {{ r.beneficiary.full_name }}</span>
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <span class="badge {{ r.status_badge }}">{{ r.get_status_display }}</span>
+            {% if r.urgency != "normal" %}<span class="badge {{ r.urgency_badge }}">{{ r.get_urgency_display|lower }}</span>{% endif %}
+            {% if r.is_overdue %}<span class="badge bg-red-600 text-white">просрочена</span>{% endif %}
+          </div>
+        </div>
+        <p class="mt-1 text-sm text-slate-600">
+          {% if r.due_date %}Срок: <strong class="{% if r.is_overdue %}text-red-700{% else %}text-slate-900{% endif %}">{{ r.due_date|date:"d.m.Y" }}</strong> · {% endif %}
+          Ответственный: {{ r.responsible|default:"не назначен" }} · создана {{ r.created_at|date:"d.m.Y" }}
+        </p>
+      </li>
+    {% endfor %}
+  </ul>
+
+  {% if page.has_other_pages %}
+    <nav class="mt-4 flex items-center justify-between gap-2 text-sm" aria-label="Страницы">
+      {% if page.has_previous %}
+        <a href="{% query_replace request page=page.previous_page_number %}" class="btn btn-secondary"
+           hx-get="{% query_replace request page=page.previous_page_number %}" hx-target="#request-results" hx-push-url="true">← Назад</a>
+      {% else %}<span></span>{% endif %}
+      <span class="text-slate-600">Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
+      {% if page.has_next %}
+        <a href="{% query_replace request page=page.next_page_number %}" class="btn btn-secondary"
+           hx-get="{% query_replace request page=page.next_page_number %}" hx-target="#request-results" hx-push-url="true">Вперёд →</a>
+      {% else %}<span></span>{% endif %}
+    </nav>
+  {% endif %}
+{% else %}
+  <div class="card text-center text-slate-600">
+    <p>Заявок нет. Измените условия или <a href="{% url 'requests:list' %}?{{ reset_param }}=1">сбросьте фильтры</a>.</p>
+  </div>
+{% endif %}

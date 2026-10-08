@@ -1,5 +1,6 @@
 <a href="{% url 'core:home' %}" class="{{ link_class }}">Главная</a>
 {% if is_admin or "coordinator" in user_roles or "curator" in user_roles %}<a href="{% url 'volunteers:list' %}" class="{{ link_class }}">Волонтёры</a>
-<a href="{% url 'beneficiaries:list' %}" class="{{ link_class }}">Подопечные</a>{% endif %}
+<a href="{% url 'beneficiaries:list' %}" class="{{ link_class }}">Подопечные</a>
+<a href="{% url 'requests:list' %}" class="{{ link_class }}">Заявки</a>
+<a href="{% url 'interactions:tasks' %}" class="{{ link_class }}">Задачи</a>{% endif %}
 {% if is_admin %}<a href="{% url 'admin:index' %}" class="{{ link_class }}">Администрирование</a>{% endif %}
-<a href="{% url 'accounts:password_change' %}" class="{{ link_class }}">Сменить пароль</a>

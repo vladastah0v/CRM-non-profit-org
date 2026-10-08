@@ -16,6 +16,10 @@ class NotificationKind(models.TextChoices):
     NEW_VOLUNTEER_APPLICATION = "new_volunteer_application", "Новая анкета волонтёра"
     CONSENT_REVOKED = "consent_revoked", "Отзыв согласия"
     CASE_ASSIGNED = "case_assigned", "Назначен случай подопечного"
+    REQUEST_ASSIGNED = "request_assigned", "Назначена заявка"
+    REQUEST_DUE = "request_due", "Срок заявки"
+    TASK_ASSIGNED = "task_assigned", "Назначена задача"
+    TASK_DUE = "task_due", "Срок задачи"
 
 
 class NotificationQuerySet(ArchivableQuerySet):

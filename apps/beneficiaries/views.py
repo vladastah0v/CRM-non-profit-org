@@ -25,6 +25,8 @@ from apps.consents.models import Consent
 from apps.consents.services import create_beneficiary_consent
 from apps.core.list_filters import RESET_PARAM, restore_or_save
 from apps.core.pages import action_page, apply_service_errors
+from apps.interactions.selectors import card_activity
+from apps.requests.selectors import beneficiary_help
 
 from . import permissions, selectors, services
 from .filters import SAVED_PARAMS
@@ -105,7 +107,13 @@ def beneficiary_detail(request: HttpRequest, pk: str) -> HttpResponse:
     return render(
         request,
         "beneficiaries/detail.html",
-        {"b": beneficiary, "card": card, "scan_urls": scan_urls},
+        {
+            "b": beneficiary,
+            "card": card,
+            "scan_urls": scan_urls,
+            "help": beneficiary_help(request.user, beneficiary),
+            "activity": card_activity(request.user, beneficiary),
+        },
     )
 
 
