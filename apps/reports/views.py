@@ -1,4 +1,4 @@
-"""Экраны отчётов (ФТ-О-01…03) и их выгрузка в XLSX. Каждая выгрузка — в журнал аудита."""
+"""Экраны отчётов (ФТ-О-01…03, ФТ-О-05) и их выгрузка в XLSX. Каждая выгрузка — в журнал аудита."""
 
 from __future__ import annotations
 
@@ -38,6 +38,7 @@ def report_index(request: HttpRequest) -> HttpResponse:
             "can_program": permissions.can_program_report(request.user),
             "program_all": permissions.program_report_all(request.user),
             "can_volunteers": permissions.can_volunteer_reports(request.user),
+            "can_requests": permissions.can_request_report(request.user),
         },
     )
 
@@ -218,6 +219,71 @@ def funnel_report(request: HttpRequest) -> HttpResponse:
             )
             return xlsx_response(build_workbook(funnel_sheets(report)), "voronka-volonterov")
     return render(request, "reports/funnel.html", {"form": form, "report": report})
+
+
+# ---------------------------------------------------------------------------
+# ФТ-О-05
+# ---------------------------------------------------------------------------
+def request_sheets(report: services.RequestReport) -> list[Sheet]:
+    caption = [
+        "Отчёт по заявкам",
+        f"Период: {report.period.label}",
+        f"Охват: {report.scope}",
+        f"Открытые и просроченные — {report.state_label}",
+    ]
+
+    def days(value: Any) -> Any:
+        return value if value is not None else "—"
+
+    totals = [
+        ("Поступило заявок", report.received),
+        ("Выполнено", report.done),
+        ("Отклонено", report.rejected),
+        ("Отменено", report.cancelled),
+        ("Дней до выполнения в среднем", days(report.average_days)),
+        ("Дней до выполнения, медиана", days(report.median_days)),
+        ("Открытых", report.open_at_end),
+        ("Из них просроченных", report.overdue_at_end),
+    ]
+    return [
+        Sheet("Итоги", ["Показатель", "Значение"], totals, caption=caption),
+        Sheet(
+            "По типам помощи",
+            ["Тип помощи", "Поступило", "Выполнено", "Дней в среднем", "Открытых", "Просроченных"],
+            [
+                (r.name, r.received, r.done, days(r.average_days), r.open_at_end, r.overdue_at_end)
+                for r in report.by_type
+            ],
+            caption=caption,
+        ),
+        Sheet(
+            "Открытые по срочности",
+            ["Срочность", "Открытых"],
+            report.open_by_urgency,
+            caption=caption,
+        ),
+    ]
+
+
+@login_required
+@require_GET
+def request_report(request: HttpRequest) -> HttpResponse:
+    if not permissions.can_request_report(request.user):
+        raise PermissionDenied
+    form = PeriodForm(request.GET or None)
+    report = None
+    if form.is_valid():
+        report = services.request_report(request.user, form.period)
+        if _wants_xlsx(request):
+            _log_export(
+                request,
+                "requests",
+                date_from=str(form.period.date_from),
+                date_to=str(form.period.date_to),
+                scope="all" if permissions.program_report_all(request.user) else "own",
+            )
+            return xlsx_response(build_workbook(request_sheets(report)), "otchet-po-zayavkam")
+    return render(request, "reports/requests.html", {"form": form, "report": report})
 
 
 # ---------------------------------------------------------------------------

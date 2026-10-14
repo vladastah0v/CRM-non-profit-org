@@ -1,4 +1,4 @@
-"""Экраны заявок (ФТ-З-01…02, ФТ-З-04) и оказанной помощи (ФТ-З-03)."""
+"""Экраны заявок (ФТ-З-01…02, ФТ-З-04) и оказанной помощи (ФТ-З-03, ФТ-З-05, ФТ-З-06)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from django.core.paginator import Paginator
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.views.decorators.vary import vary_on_headers
 
@@ -20,10 +21,16 @@ from apps.beneficiaries.models import Beneficiary
 from apps.core.list_filters import RESET_PARAM, restore_or_save
 from apps.core.pages import action_page, apply_service_errors
 
-from . import permissions, services
+from . import permissions, selectors, services
 from .filters import SAVED_PARAMS, RequestFilter
-from .forms import AssistanceForm, HelpRequestForm, RequestStatusForm
-from .models import Assistance, HelpRequest
+from .forms import (
+    AssistanceFileForm,
+    AssistanceForm,
+    BulkAssistanceForm,
+    HelpRequestForm,
+    RequestStatusForm,
+)
+from .models import Assistance, AssistanceFile, HelpRequest
 
 LIST_KEY = "requests"
 PAGE_SIZE = 25
@@ -87,7 +94,12 @@ def request_list(request: HttpRequest) -> HttpResponse:
     )
     request_filter = RequestFilter(request.GET, queryset=queryset, user=request.user)
     page = Paginator(request_filter.qs, PAGE_SIZE).get_page(request.GET.get("page"))
-    context = {"filter": request_filter, "page": page, "reset_param": RESET_PARAM}
+    context = {
+        "filter": request_filter,
+        "page": page,
+        "reset_param": RESET_PARAM,
+        "can_bulk": permissions.can_register_bulk(request.user),
+    }
     template = "requests/_results.html" if is_htmx else "requests/list.html"
     return render(request, template, context)
 
@@ -295,4 +307,82 @@ def assistance_archive(request: HttpRequest, pk: str) -> HttpResponse:
         messages.error(request, " ".join(exc.messages))
     else:
         messages.success(request, "Запись о помощи переведена в архив.")
+    return redirect(assistance.beneficiary)
+
+
+# ---------------------------------------------------------------------------
+# Массовая регистрация помощи (ФТ-З-05)
+# ---------------------------------------------------------------------------
+@login_required
+@require_http_methods(["GET", "POST"])
+def assistance_bulk(request: HttpRequest) -> HttpResponse:
+    """Одна и та же помощь списку подопечных. Отбор — в адресе страницы, поэтому при
+    отправке проверяется тот же список, что был показан."""
+    if not permissions.can_register_bulk(request.user):
+        raise PermissionDenied
+    candidates = selectors.bulk_candidates(request.user, request.GET)
+    queryset = candidates.queryset.none() if candidates.too_many else candidates.queryset
+    initial = {
+        "executor_user": request.user.pk,
+        "provided_on": timezone.localdate(),  # на мероприятии регистрируют в тот же день
+        "batch_id": uuid.uuid4(),
+    }
+    form = BulkAssistanceForm(request.POST or None, candidates=queryset, initial=initial)
+    if request.method == "POST" and form.is_valid():
+        try:
+            created = services.register_assistance_bulk(
+                list(form.cleaned_data["beneficiaries"]),
+                form.service_data(),
+                batch_id=form.cleaned_data["batch_id"],
+                request=request,
+            )
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
+        else:
+            messages.success(request, f"Зарегистрировано фактов помощи: {len(created)}.")
+            return redirect(f"{reverse('requests:assistance_bulk')}?{request.GET.urlencode()}")
+    return render(
+        request,
+        "requests/bulk.html",
+        {"form": form, "candidates": candidates, "limit": selectors.BULK_LIMIT},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Файлы к помощи (ФТ-З-06)
+# ---------------------------------------------------------------------------
+@login_required
+@require_http_methods(["GET", "POST"])
+def assistance_file_add(request: HttpRequest, pk: str) -> HttpResponse:
+    assistance = _managed_assistance(request, pk)
+    form = AssistanceFileForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            services.add_assistance_file(assistance, **form.cleaned_data, request=request)
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
+        else:
+            messages.success(request, "Файл прикреплён к записи о помощи.")
+            return redirect(assistance.beneficiary)
+    return action_page(
+        request,
+        form,
+        subject=assistance.beneficiary,
+        title=f"Файл к помощи: {assistance}",
+        submit="Прикрепить",
+        multipart=True,
+        intro="Фото с подопечным — только если у него есть действующее согласие на фото- "
+        "и видеосъёмку. Акт, чек или накладную загружайте как документ.",
+    )
+
+
+@login_required
+@require_POST
+def assistance_file_archive(request: HttpRequest, pk: str, file_pk: str) -> HttpResponse:
+    assistance = _managed_assistance(request, pk)
+    item = get_object_or_404(
+        AssistanceFile.objects.filter(assistance=assistance, is_archived=False), pk=file_pk
+    )
+    services.archive_assistance_file(item, request=request)
+    messages.success(request, "Файл убран в архив.")
     return redirect(assistance.beneficiary)

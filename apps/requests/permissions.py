@@ -41,3 +41,8 @@ def manages_request(user: Any, help_request: HelpRequest) -> bool:
     return help_request.responsible_id == user.pk or manages_beneficiary(
         user, help_request.beneficiary
     )
+
+
+def can_register_bulk(user: Any) -> bool:
+    """ФТ-З-05: массовая регистрация — администратор (любые подопечные) и куратор (свои)."""
+    return user_has_role(user, RoleCode.ADMIN, RoleCode.CURATOR)

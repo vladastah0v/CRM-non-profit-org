@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{# ФТ-З-05: массовая регистрация помощи. Контекст: form, candidates, limit #}
+
+{% block title %}Массовая регистрация помощи{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{% url 'requests:list' %}">← Заявки</a></nav>
+  <h1 class="mb-1">Массовая регистрация помощи</h1>
+  <p class="mb-4 max-w-2xl text-slate-600">Одна и та же помощь сразу нескольким подопечным — например, выдача наборов на мероприятии. Каждому отмеченному создаётся отдельная запись о помощи.</p>
+
+  <div class="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+    <aside>
+      {% with filter=candidates.filter_form %}
+        <form method="get" class="card space-y-4" role="search" aria-label="Отбор подопечных">
+          {% include "partials/field.html" with field=filter.q %}
+          {% include "partials/field.html" with field=filter.program %}
+          {% include "partials/field.html" with field=filter.category %}
+          <div class="flex flex-wrap gap-2">
+            <button type="submit" class="btn btn-primary">Показать</button>
+            <a href="{% url 'requests:assistance_bulk' %}" class="btn btn-secondary">Сбросить</a>
+          </div>
+          <p class="form-help">В списке — подопечные, которых вы ведёте, кроме закрытых случаев и карточек в архиве.</p>
+        </form>
+      {% endwith %}
+    </aside>
+
+    <form method="post" action="?{{ request.GET.urlencode }}" class="space-y-4" novalidate>
+      {% csrf_token %}
+      {{ form.batch_id }}
+      {% include "partials/form_errors.html" %}
+
+      <section class="card" aria-labelledby="people-title">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 id="people-title">Подопечные <span class="text-base font-normal text-slate-500">· найдено {{ candidates.total }}</span></h2>
+          {% if not candidates.too_many and candidates.total %}
+            <div class="flex gap-3 text-sm">
+              <button type="button" class="text-brand-700 hover:text-brand-800" data-check-all="beneficiaries" data-value="1">Отметить всех</button>
+              <button type="button" class="text-brand-700 hover:text-brand-800" data-check-all="beneficiaries" data-value="0">Снять отметки</button>
+            </div>
+          {% endif %}
+        </div>
+        {% if candidates.too_many %}
+          <p class="text-sm text-amber-800" role="note">Слишком много подопечных для одной регистрации (больше {{ limit }}). Уточните отбор: программа, категория или ФИО.</p>
+        {% elif not candidates.total %}
+          <p class="text-sm text-slate-600">Никого не найдено. Измените отбор.</p>
+        {% else %}
+          <fieldset>
+            <legend class="sr-only">Кому оказана помощь</legend>
+            <ul class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
+              {% for box in form.beneficiaries %}
+                <li><label class="flex items-start gap-2 py-1">{{ box.tag }}<span>{{ box.choice_label }}</span></label></li>
+              {% endfor %}
+            </ul>
+          </fieldset>
+          {% for error in form.beneficiaries.errors %}<p class="form-error" role="alert">{{ error }}</p>{% endfor %}
+        {% endif %}
+      </section>
+
+      <section class="card space-y-4" aria-labelledby="what-title">
+        <h2 id="what-title">Что выдано</h2>
+        <div class="grid gap-4 sm:grid-cols-2">
+          {% include "partials/field.html" with field=form.assistance_type %}
+          {% include "partials/field.html" with field=form.provided_on %}
+          {% include "partials/field.html" with field=form.quantity %}
+          {% include "partials/field.html" with field=form.unit %}
+          {% include "partials/field.html" with field=form.amount %}
+          {% include "partials/field.html" with field=form.program %}
+          {% include "partials/field.html" with field=form.executor_user %}
+          {% include "partials/field.html" with field=form.executor_volunteer %}
+        </div>
+        {% include "partials/field.html" with field=form.comment %}
+        <div class="flex flex-wrap gap-3">
+          <button type="submit" class="btn btn-primary" {% if candidates.too_many or not candidates.total %}disabled{% endif %}>Зарегистрировать</button>
+          <a href="{% url 'requests:list' %}" class="btn btn-secondary">Отмена</a>
+        </div>
+      </section>
+    </form>
+  </div>
+{% endblock %}

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import datetime
+import uuid
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.core.files.uploadedfile import UploadedFile
+from django.db import connection, transaction
 from django.http import HttpRequest
 from django.utils import timezone
 
@@ -16,11 +19,20 @@ from apps.accounts.roles import RoleCode, user_has_role
 from apps.audit.models import AuditAction
 from apps.audit.services import log_event
 from apps.beneficiaries.models import Beneficiary, CaseStatus
+from apps.consents.files import PHOTO_TYPES, store_attachment
+from apps.consents.models import Consent, ConsentKind
 from apps.core.context import get_current_user
 from apps.notifications.models import NotificationKind
 from apps.notifications.services import notify
 
-from .models import Assistance, HelpRequest, RequestStatus, RequestStatusChange
+from .models import (
+    Assistance,
+    AssistanceFile,
+    AssistanceFileKind,
+    HelpRequest,
+    RequestStatus,
+    RequestStatusChange,
+)
 
 S = RequestStatus
 
@@ -348,6 +360,103 @@ def archive_assistance(assistance: Assistance, *, request: HttpRequest | None = 
         raise ValidationError("Это единственный факт помощи по выполненной заявке.")
     assistance.archive()
     log_event(AuditAction.ARCHIVE, request=request, obj=assistance)
+
+
+@transaction.atomic
+def register_assistance_bulk(
+    beneficiaries: Sequence[Beneficiary],
+    data: dict[str, Any],
+    *,
+    batch_id: uuid.UUID,
+    request: HttpRequest | None = None,
+) -> list[Assistance]:
+    """ФТ-З-05: одна и та же помощь списку подопечных (выдача наборов на мероприятии).
+
+    Всё или ничего: если чей-то случай закрыт или карточка в архиве — ни одной записи.
+    Повторная отправка той же формы (batch_id) записи второй раз не создаёт.
+    """
+    # Блокировка на время транзакции: двойной клик не пройдёт проверку дважды
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(%s)", [batch_id.int % (2**63)])
+    if Assistance.objects.filter(batch_id=batch_id).exists():
+        raise ValidationError("Эта регистрация уже сохранена — повторно записи не созданы.")
+    if not beneficiaries:
+        raise ValidationError({"beneficiaries": "Отметьте хотя бы одного подопечного."})
+    problems = []
+    for beneficiary in beneficiaries:
+        try:
+            _ensure_case_open(beneficiary)
+        except ValidationError as exc:
+            problems.append(f"{beneficiary.full_name}: {' '.join(exc.messages).lower()}")
+    if problems:
+        raise ValidationError({"beneficiaries": problems})
+    clean = _clean_assistance(beneficiaries[0], data, None)
+    # Не bulk_create: нужны автор записи и строка в истории изменений, как при обычной регистрации
+    created = [
+        Assistance.objects.create(beneficiary=b, batch_id=batch_id, **clean) for b in beneficiaries
+    ]
+    for assistance in created:
+        log_event(
+            AuditAction.CREATE,
+            request=request,
+            obj=assistance,
+            extra={"beneficiary": str(assistance.beneficiary_id), "batch": str(batch_id)},
+        )
+    return created
+
+
+# ---------------------------------------------------------------------------
+# Файлы к помощи (ФТ-З-06)
+# ---------------------------------------------------------------------------
+PHOTO_UPLOAD_TYPES = PHOTO_TYPES | {"image/heic"}
+
+
+@transaction.atomic
+def add_assistance_file(
+    assistance: Assistance,
+    *,
+    kind: str,
+    upload: UploadedFile,
+    title: str = "",
+    request: HttpRequest | None = None,
+) -> AssistanceFile:
+    """Фото — только при действующем согласии подопечного на фото- и видеосъёмку (ФТ-Д-01)."""
+    if assistance.is_archived or assistance.beneficiary.is_archived:
+        raise ValidationError("Запись о помощи или карточка подопечного в архиве.")
+    allowed = None
+    if kind == AssistanceFileKind.PHOTO:
+        has_consent = (
+            Consent.objects.valid_on()
+            .filter(beneficiary=assistance.beneficiary, kind=ConsentKind.PHOTO_VIDEO)
+            .exists()
+        )
+        if not has_consent:
+            raise ValidationError(
+                {
+                    "kind": "У подопечного нет действующего согласия на фото- и видеосъёмку. "
+                    "Добавьте согласие или загрузите файл как документ, если людей на нём нет."
+                }
+            )
+        allowed = frozenset(PHOTO_UPLOAD_TYPES)
+    item = AssistanceFile.objects.create(
+        assistance=assistance,
+        kind=kind,
+        title=" ".join(title.split()),
+        file=store_attachment(upload, allowed),
+    )
+    log_event(
+        AuditAction.CREATE,
+        request=request,
+        obj=item,
+        extra={"assistance": str(assistance.pk), "kind": kind},
+    )
+    return item
+
+
+@transaction.atomic
+def archive_assistance_file(item: AssistanceFile, *, request: HttpRequest | None = None) -> None:
+    item.archive()
+    log_event(AuditAction.ARCHIVE, request=request, obj=item)
 
 
 @transaction.atomic

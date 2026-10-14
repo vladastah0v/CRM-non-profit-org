@@ -17,7 +17,7 @@ class AttachmentQuerySet(ArchivableQuerySet):
     def visible_to(self, user: Any) -> Self:
         """Администратор видит все файлы, остальные — загруженные ими и файлы карточек,
         к которым у них есть доступ: координатор — сканы согласий, документов и фото
-        волонтёров, куратор — сканы согласий и документы своих подопечных."""
+        волонтёров, куратор — сканы согласий, документы и файлы к помощи своих подопечных."""
         if user_has_role(user, RoleCode.ADMIN):
             return self.all()
         if not getattr(user, "is_authenticated", False):
@@ -43,7 +43,12 @@ class AttachmentQuerySet(ArchivableQuerySet):
             own = beneficiary.objects.owned_by(user)
             own_consents = Consent.objects.filter(scan=OuterRef("pk"), beneficiary__in=own)
             own_documents = document.objects.filter(file=OuterRef("pk"), beneficiary__in=own)
-            condition |= Q(Exists(own_consents)) | Q(Exists(own_documents))
+            own_assistance_files = apps.get_model("requests", "AssistanceFile").objects.filter(
+                file=OuterRef("pk"), assistance__beneficiary__in=own
+            )
+            condition |= (
+                Q(Exists(own_consents)) | Q(Exists(own_documents)) | Q(Exists(own_assistance_files))
+            )
         return self.filter(condition)
 
 

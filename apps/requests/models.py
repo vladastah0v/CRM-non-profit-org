@@ -261,6 +261,9 @@ class Assistance(BaseModel):
         related_name="provided_assistance",
     )
     comment = models.TextField("комментарий", blank=True)
+    # Общая метка записей одной массовой регистрации (ФТ-З-05): повторная отправка той же
+    # формы не создаёт записи второй раз
+    batch_id = models.UUIDField(null=True, blank=True, editable=False, db_index=True)
 
     history = HistoricalRecords(
         history_id_field=models.UUIDField(default=uuid.uuid4), verbose_name="история помощи"
@@ -306,3 +309,33 @@ class Assistance(BaseModel):
     @property
     def executor(self) -> Any:
         return self.executor_user or self.executor_volunteer
+
+
+class AssistanceFileKind(models.TextChoices):
+    PHOTO = "photo", "Фото"
+    DOCUMENT = "document", "Подтверждающий документ"
+
+
+class AssistanceFile(BaseModel):
+    """Фото или подтверждающий документ к факту помощи (ФТ-З-06): акт, чек, накладная.
+    Фото с подопечным — только при действующем согласии на фото- и видеосъёмку."""
+
+    assistance = models.ForeignKey(
+        Assistance, verbose_name="помощь", on_delete=models.PROTECT, related_name="files"
+    )
+    kind = models.CharField("вид", max_length=20, choices=AssistanceFileKind.choices)
+    title = models.CharField("описание", max_length=200, blank=True)
+    file = models.ForeignKey(
+        "consents.Attachment",
+        verbose_name="файл",
+        on_delete=models.PROTECT,
+        related_name="assistance_files",
+    )
+
+    class Meta:
+        verbose_name = "файл к помощи"
+        verbose_name_plural = "файлы к помощи"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return self.title or self.get_kind_display()

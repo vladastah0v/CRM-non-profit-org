@@ -42,7 +42,7 @@ from apps.beneficiaries.models import (
 from apps.interactions.models import Interaction, Task
 from apps.notifications.models import NotificationKind
 from apps.notifications.services import notify, users_with_role
-from apps.requests.models import Assistance, HelpRequest, RequestStatusChange
+from apps.requests.models import Assistance, AssistanceFile, HelpRequest, RequestStatusChange
 from apps.shifts.models import Assignment, AssignmentStatusChange
 from apps.shifts.services import cancel_for_beneficiary, cancel_for_volunteer
 from apps.volunteers.models import (
@@ -216,6 +216,12 @@ def anonymize_beneficiary(
     HelpRequest.history.model.objects.filter(beneficiary_id=beneficiary.pk).delete()
     Assistance.objects.filter(beneficiary=beneficiary).update(comment="")
     Assistance.history.model.objects.filter(beneficiary_id=beneficiary.pk).delete()
+    # Фото и документы к помощи (ФТ-З-06) — удаляются, факты помощи остаются
+    assistance_files = list(
+        AssistanceFile.objects.filter(assistance__beneficiary=beneficiary).select_related("file")
+    )
+    AssistanceFile.objects.filter(pk__in=[f.pk for f in assistance_files]).delete()
+    _delete_files([f.file for f in assistance_files])
 
     Assignment.objects.filter(beneficiary=beneficiary).update(task_comment="")
     AssignmentStatusChange.objects.filter(assignment__beneficiary=beneficiary).update(comment="")

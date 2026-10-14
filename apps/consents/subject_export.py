@@ -29,6 +29,7 @@ SKIP_FIELDS = frozenset(
         "is_archived",
         "user",
         "expiry_notice_for",
+        "batch_id",
     }
 )
 
@@ -159,7 +160,7 @@ def volunteer_sheets(volunteer: Volunteer) -> list[Sheet]:
 
 def beneficiary_sheets(beneficiary: Beneficiary) -> list[Sheet]:
     from apps.interactions.models import Interaction, Task
-    from apps.requests.models import Assistance, HelpRequest
+    from apps.requests.models import Assistance, AssistanceFile, HelpRequest
     from apps.shifts.models import Assignment
 
     sensitive = BeneficiarySensitive.objects.filter(beneficiary=beneficiary).first()
@@ -211,7 +212,16 @@ def beneficiary_sheets(beneficiary: Beneficiary) -> list[Sheet]:
             beneficiary.status_changes.model,
             CARD_LINKS,
         ),
-        _files_sheet([c.scan for c in consents] + [d.file for d in documents]),
+        _files_sheet(
+            [c.scan for c in consents]
+            + [d.file for d in documents]
+            + [
+                f.file
+                for f in AssistanceFile.objects.filter(
+                    assistance__beneficiary=beneficiary
+                ).select_related("file")
+            ]
+        ),
     ]
     return sheets
 

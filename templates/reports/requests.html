@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Отчёт по заявкам{% endblock %}
+
+{% block content %}
+  <nav class="mb-3 text-sm" aria-label="Навигация"><a href="{% url 'reports:index' %}">← Отчёты</a></nav>
+  <h1 class="mb-4">Отчёт по заявкам</h1>
+  {% include "reports/_period_form.html" %}
+
+  {% if report %}
+    <p class="mb-3 text-sm text-slate-600">Период: {{ report.period.label }} · охват: {{ report.scope }}</p>
+    <div class="grid gap-4 lg:grid-cols-3">
+      <section class="card" aria-labelledby="period-title">
+        <h2 id="period-title" class="mb-3">За период</h2>
+        <dl class="divide-y divide-slate-100 text-sm">
+          <div class="flex justify-between py-2"><dt>Поступило заявок</dt><dd class="font-medium">{{ report.received }}</dd></div>
+          <div class="flex justify-between py-2"><dt>Выполнено</dt><dd class="font-medium">{{ report.done }}</dd></div>
+          <div class="flex justify-between py-2"><dt>Отклонено</dt><dd class="font-medium">{{ report.rejected }}</dd></div>
+          <div class="flex justify-between py-2"><dt>Отменено</dt><dd class="font-medium">{{ report.cancelled }}</dd></div>
+          <div class="flex justify-between py-2"><dt>Дней до выполнения в среднем</dt><dd class="font-medium">{{ report.average_days|default_if_none:"—" }}</dd></div>
+          <div class="flex justify-between py-2"><dt>Медиана, дней</dt><dd class="font-medium">{{ report.median_days|default_if_none:"—" }}</dd></div>
+        </dl>
+      </section>
+      <section class="card" aria-labelledby="open-title">
+        <h2 id="open-title" class="mb-3">Открытые {{ report.state_label }}</h2>
+        <dl class="divide-y divide-slate-100 text-sm">
+          <div class="flex justify-between py-2"><dt>Открытых</dt><dd class="font-medium">{{ report.open_at_end }}</dd></div>
+          <div class="flex justify-between py-2"><dt>Из них просроченных</dt><dd class="font-medium{% if report.overdue_at_end %} text-red-700{% endif %}">{{ report.overdue_at_end }}</dd></div>
+          {% for label, n in report.open_by_urgency %}
+            <div class="flex justify-between py-2 text-slate-600"><dt>{{ label }}</dt><dd>{{ n }}</dd></div>
+          {% endfor %}
+        </dl>
+      </section>
+    </div>
+
+    <section class="card mt-4" aria-labelledby="types-title">
+      <h2 id="types-title" class="mb-3">По типам помощи</h2>
+      {% if report.by_type %}
+        <div class="relative overflow-x-auto">
+          <table class="table">
+            <thead><tr><th scope="col">Тип помощи</th><th scope="col" class="text-right">Поступило</th><th scope="col" class="text-right">Выполнено</th><th scope="col" class="text-right">Дней в среднем</th><th scope="col" class="text-right">Открытых</th><th scope="col" class="text-right">Просроченных</th></tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              {% for r in report.by_type %}
+                <tr>
+                  <td>{{ r.name }}</td>
+                  <td class="text-right">{{ r.received }}</td>
+                  <td class="text-right">{{ r.done }}</td>
+                  <td class="text-right">{{ r.average_days|default_if_none:"—" }}</td>
+                  <td class="text-right">{{ r.open_at_end }}</td>
+                  <td class="text-right">{{ r.overdue_at_end }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-slate-600">Заявок за период нет.</p>
+      {% endif %}
+    </section>
+
+    <section class="mt-4 text-sm text-slate-600" aria-labelledby="rules-title">
+      <h2 id="rules-title" class="mb-1 text-base">Как считается</h2>
+      <p>Поступившие — заявки, созданные в периоде. Выполненные, отклонённые и отменённые — переведённые в этот статус в периоде. Время выполнения — от создания заявки до статуса «Выполнена», по заявкам, выполненным в периоде. Открытые — в статусе «Новая» или «В работе» {{ report.state_label }}; просроченные — открытые, у которых желаемая дата уже прошла. Заявки в архиве не учитываются.</p>
+    </section>
+  {% endif %}
+{% endblock %}

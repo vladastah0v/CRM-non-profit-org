@@ -16,6 +16,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from django.utils import timezone
@@ -47,6 +48,7 @@ from apps.volunteers.tests.conftest import (  # noqa: F401
 
 pytestmark = pytest.mark.django_db
 
+PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
 ADMIN, COORD, OWNER, CURATOR, ANALYST = "admin", "coordinator", "owner", "curator", "analyst"
 ROLES = (ADMIN, COORD, OWNER, CURATOR, ANALYST)
 EVERYONE = frozenset(ROLES)
@@ -83,6 +85,11 @@ def world(make_user, make_volunteer, make_beneficiary, refs, brefs) -> dict[str,
     )
     assistance = request_services.register_assistance(
         beneficiary, assistance_data(food, users[OWNER]), help_request=help_request
+    )
+    assistance_file = request_services.add_assistance_file(
+        assistance,
+        kind="document",
+        upload=SimpleUploadedFile("акт.pdf", PDF),
     )
     interaction = Interaction.objects.create(
         beneficiary=beneficiary,
@@ -131,6 +138,7 @@ def world(make_user, make_volunteer, make_beneficiary, refs, brefs) -> dict[str,
         "access": access,
         "request": help_request,
         "assistance": assistance,
+        "assistance_file": assistance_file,
         "interaction": interaction,
         "task": task,
         "shift": shift,
@@ -235,6 +243,15 @@ TABLE: list[tuple[str, Args, str, frozenset[str]]] = [
     ("requests:assistance_add", B, "GET", CASE_MANAGERS),
     ("requests:assistance_edit", pk("assistance"), "GET", CASE_MANAGERS),
     ("requests:assistance_archive", pk("assistance"), "POST", CASE_MANAGERS),
+    # Массовая регистрация: администратор и любой куратор — по своим подопечным
+    ("requests:assistance_bulk", none, "GET", frozenset({ADMIN, OWNER, CURATOR})),
+    ("requests:assistance_file_add", pk("assistance"), "GET", CASE_MANAGERS),
+    (
+        "requests:assistance_file_archive",
+        lambda w: [w["assistance"].pk, w["assistance_file"].pk],
+        "POST",
+        CASE_MANAGERS,
+    ),
     # Взаимодействия и задачи: пишет тот, кто работает с карточкой; правит автор
     ("interactions:add", lambda w: ["beneficiary", w["beneficiary"].pk], "GET", CASE_MANAGERS),
     ("interactions:edit", pk("interaction"), "GET", CASE_MANAGERS),
@@ -267,6 +284,7 @@ TABLE: list[tuple[str, Args, str, frozenset[str]]] = [
     ("reports:program", none, "GET", frozenset({ADMIN, OWNER, CURATOR, ANALYST})),
     ("reports:volunteers", none, "GET", frozenset({ADMIN, COORD, ANALYST})),
     ("reports:funnel", none, "GET", frozenset({ADMIN, COORD, ANALYST})),
+    ("reports:requests", none, "GET", frozenset({ADMIN, OWNER, CURATOR, ANALYST})),
     ("reports:export", lambda w: ["beneficiaries"], "GET", CARD_STAFF),
     # Администрирование
     ("imports:list", none, "GET", ONLY_ADMIN),

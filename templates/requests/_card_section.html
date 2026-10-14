@@ -40,9 +40,27 @@
               · {{ a.executor }}{% if a.program %} · {{ a.program }}{% endif %}
             </p>
             {% if a.comment %}<p class="text-slate-600">{{ a.comment }}</p>{% endif %}
+            {% with files=help.files|get_item:a.pk %}
+              {% if files %}
+                <ul class="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                  {% for f, url in files %}
+                    <li class="flex items-center gap-1">
+                      <a href="{{ url }}">{{ f.get_kind_display }}{% if f.title %}: {{ f.title }}{% endif %}</a>
+                      {% if help.manages and not b.is_archived %}
+                        <form method="post" action="{% url 'requests:assistance_file_archive' a.pk f.pk %}" class="inline" data-confirm="Убрать файл в архив?">
+                          {% csrf_token %}
+                          <button type="submit" class="text-slate-400 hover:text-red-700" aria-label="Убрать файл «{{ f }}»">×</button>
+                        </form>
+                      {% endif %}
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            {% endwith %}
             {% if help.manages and not b.is_archived %}
               <div class="mt-1 flex gap-3">
                 <a href="{% url 'requests:assistance_edit' a.pk %}">Изменить</a>
+                <a href="{% url 'requests:assistance_file_add' a.pk %}">+ Файл</a>
                 <form method="post" action="{% url 'requests:assistance_archive' a.pk %}" data-confirm="Перевести запись о помощи в архив?">
                   {% csrf_token %}
                   <button type="submit" class="text-red-700 hover:text-red-800">В архив</button>

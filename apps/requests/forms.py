@@ -11,7 +11,7 @@ from apps.core.forms import DateInput, StyledFormMixin
 from apps.core.models import AssistanceType, Program
 from apps.volunteers.models import Volunteer, VolunteerStatus
 
-from .models import HelpRequest, RequestStatus, Urgency
+from .models import AssistanceFileKind, HelpRequest, RequestStatus, Urgency
 
 
 def responsibles() -> Any:
@@ -134,7 +134,11 @@ class AssistanceForm(StyledFormMixin, forms.Form):
     )
 
     def __init__(
-        self, *args: Any, beneficiary: Beneficiary, with_request: bool = True, **kwargs: Any
+        self,
+        *args: Any,
+        beneficiary: Beneficiary | None = None,
+        with_request: bool = True,
+        **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
         querysets: dict[str, Any] = {
@@ -150,7 +154,9 @@ class AssistanceForm(StyledFormMixin, forms.Form):
             "executor_volunteer": Volunteer.objects.filter(
                 is_archived=False, status__in=[VolunteerStatus.ACTIVE, VolunteerStatus.PAUSED]
             ).only("id", "last_name", "first_name", "middle_name"),
-            "request": HelpRequest.objects.open().filter(beneficiary=beneficiary),
+            "request": HelpRequest.objects.open().filter(beneficiary=beneficiary)
+            if beneficiary is not None
+            else HelpRequest.objects.none(),
         }
         for name, queryset in querysets.items():
             cast(forms.ModelChoiceField, self.fields[name]).queryset = queryset
@@ -168,3 +174,47 @@ class AssistanceForm(StyledFormMixin, forms.Form):
 
     def service_data(self) -> dict[str, Any]:
         return {k: v for k, v in self.cleaned_data.items() if k != "request"}
+
+
+class BeneficiaryChoiceField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, obj: Any) -> str:
+        """ФИО и год рождения — чтобы различать тёзок."""
+        return f"{obj.full_name}, {obj.birth_date:%Y} г. р."
+
+
+class BulkAssistanceForm(AssistanceForm):
+    """ФТ-З-05: одна и та же помощь сразу нескольким подопечным. Количество и сумма — на
+    каждого. batch_id — метка отправки: повтор той же формы записи не задваивает."""
+
+    beneficiaries = BeneficiaryChoiceField(
+        label="Подопечные",
+        queryset=Beneficiary.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+        error_messages={"required": "Отметьте хотя бы одного подопечного."},
+    )
+    batch_id = forms.UUIDField(widget=forms.HiddenInput)
+
+    def __init__(self, *args: Any, candidates: Any, **kwargs: Any) -> None:
+        super().__init__(*args, with_request=False, **kwargs)
+        field = cast(forms.ModelMultipleChoiceField, self.fields["beneficiaries"])
+        field.queryset = candidates
+        self.fields["quantity"].help_text = "На каждого подопечного."
+        self.fields["amount"].help_text = "На каждого подопечного."
+
+    def service_data(self) -> dict[str, Any]:
+        skip = {"request", "beneficiaries", "batch_id"}
+        return {k: v for k, v in self.cleaned_data.items() if k not in skip}
+
+
+class AssistanceFileForm(StyledFormMixin, forms.Form):
+    """ФТ-З-06: фото или подтверждающий документ (акт, чек, накладная)."""
+
+    kind = forms.ChoiceField(label="Что это", choices=AssistanceFileKind.choices)
+    upload = forms.FileField(
+        label="Файл",
+        help_text="PDF или фото, до 20 МБ.",
+        widget=forms.ClearableFileInput(attrs={"accept": "application/pdf,image/*"}),
+    )
+    title = forms.CharField(
+        label="Описание", max_length=200, required=False, help_text="Например, «акт выдачи»."
+    )

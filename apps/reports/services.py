@@ -1,4 +1,4 @@
-"""Расчёт отчётов ФТ-О-01…03. Правила подсчёта описаны в docs/reports.md — по ним фонд
+"""Расчёт отчётов ФТ-О-01…03, ФТ-О-05. Правила подсчёта описаны в docs/reports.md — по ним фонд
 сверяет отчёт с ручным расчётом.
 
 Обезличенные карточки (ФТ-А-04) учитываются: их факты помощи, часы и статусы остаются
@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import datetime
+import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -19,7 +20,7 @@ from django.utils import timezone
 
 from apps.beneficiaries.models import Beneficiary
 from apps.core.models import Program
-from apps.requests.models import Assistance
+from apps.requests.models import OPEN_STATUSES, Assistance, HelpRequest, RequestStatus, Urgency
 from apps.shifts.models import Assignment, AssignmentKind, AssignmentStatus, Shift
 from apps.volunteers.models import (
     Volunteer,
@@ -430,4 +431,136 @@ def funnel_report(user: Any, period: Period) -> FunnelReport:
         left_before_active=cohort.filter(status=VS.LEFT, start_date__isnull=True).count(),
         average_days_to_active=average,
         current=[(label, counts.get(value, 0)) for value, label in VS.choices],
+    )
+
+
+# ---------------------------------------------------------------------------
+# ФТ-О-05: отчёт по заявкам
+# ---------------------------------------------------------------------------
+@dataclass
+class RequestTypeRow:
+    name: str
+    received: int
+    done: int
+    average_days: Decimal | None
+    open_at_end: int
+    overdue_at_end: int
+
+
+@dataclass
+class RequestReport:
+    period: Period
+    scope: str
+    state_label: str  # на какой момент «открытые» и «просроченные»
+    received: int
+    done: int
+    rejected: int
+    cancelled: int
+    average_days: Decimal | None
+    median_days: Decimal | None
+    open_at_end: int
+    overdue_at_end: int
+    by_type: list[RequestTypeRow]
+    open_by_urgency: list[tuple[str, int]]
+
+
+def _request_scope(user: Any) -> QuerySet[HelpRequest]:
+    queryset = HelpRequest.objects.filter(is_archived=False)
+    if permissions.program_report_all(user):
+        return queryset
+    return queryset.filter(beneficiary__in=Beneficiary.objects.owned_by(user))
+
+
+def _days(values: list[datetime.timedelta]) -> tuple[Decimal | None, Decimal | None]:
+    """Среднее и медиана в днях, с одним знаком."""
+    if not values:
+        return None, None
+    days = [v.total_seconds() / 86400 for v in values]
+    step = Decimal("0.1")
+    return (
+        Decimal(str(sum(days) / len(days))).quantize(step),
+        Decimal(str(statistics.median(days))).quantize(step),
+    )
+
+
+def request_report(user: Any, period: Period) -> RequestReport:
+    """Поступившие, выполненные, отклонённые и отменённые за период; среднее время от
+    поступления до выполнения; открытые и просроченные на конец периода (для текущего
+    периода — на сейчас). Конечные статусы не меняются (п. 4.3), поэтому заявка была
+    открыта в момент T, если поступила раньше T и закрыта не раньше T."""
+    scope = _request_scope(user)
+    today = timezone.localdate()
+    if period.date_to >= today:
+        moment, overdue_before, state_label = timezone.now(), today, "сейчас"
+    else:
+        moment = period.end
+        overdue_before = period.date_to + datetime.timedelta(days=1)
+        state_label = f"на конец {period.date_to:%d.%m.%Y}"
+
+    received = scope.filter(created_at__gte=period.start, created_at__lt=period.end)
+    closed_in_period = scope.filter(
+        status_changed_at__gte=period.start, status_changed_at__lt=period.end
+    )
+    done = scope.filter(
+        status=RequestStatus.DONE,
+        completed_at__gte=period.start,
+        completed_at__lt=period.end,
+    )
+    open_at_end = scope.filter(created_at__lt=moment).filter(
+        Q(status__in=OPEN_STATUSES) | Q(status_changed_at__gte=moment)
+    )
+    overdue_at_end = open_at_end.filter(due_date__lt=overdue_before)
+
+    durations = [
+        completed - created
+        for created, completed in done.values_list("created_at", "completed_at")
+        if completed is not None
+    ]
+    average, median = _days(durations)
+
+    def counts(queryset: QuerySet[HelpRequest]) -> dict[str, int]:
+        return dict(
+            queryset.values("assistance_type__name")
+            .annotate(n=Count("pk"))
+            .order_by()
+            .values_list("assistance_type__name", "n")
+        )
+
+    durations_by_type: dict[str, list[datetime.timedelta]] = defaultdict(list)
+    for name, created, completed in done.values_list(
+        "assistance_type__name", "created_at", "completed_at"
+    ):
+        if completed is not None:
+            durations_by_type[name].append(completed - created)
+    received_n, done_n = counts(received), counts(done)
+    open_n, overdue_n = counts(open_at_end), counts(overdue_at_end)
+    names = sorted(set(received_n) | set(done_n) | set(open_n))
+    by_type = [
+        RequestTypeRow(
+            name=name,
+            received=received_n.get(name, 0),
+            done=done_n.get(name, 0),
+            average_days=_days(durations_by_type[name])[0],
+            open_at_end=open_n.get(name, 0),
+            overdue_at_end=overdue_n.get(name, 0),
+        )
+        for name in names
+    ]
+    urgency = dict(
+        open_at_end.values("urgency").annotate(n=Count("pk")).order_by().values_list("urgency", "n")
+    )
+    return RequestReport(
+        period=period,
+        scope="все подопечные" if permissions.program_report_all(user) else "мои подопечные",
+        state_label=state_label,
+        received=received.count(),
+        done=len(durations),
+        rejected=closed_in_period.filter(status=RequestStatus.REJECTED).count(),
+        cancelled=closed_in_period.filter(status=RequestStatus.CANCELLED).count(),
+        average_days=average,
+        median_days=median,
+        open_at_end=open_at_end.count(),
+        overdue_at_end=overdue_at_end.count(),
+        by_type=by_type,
+        open_by_urgency=[(label, urgency.get(value, 0)) for value, label in Urgency.choices],
     )
