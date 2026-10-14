@@ -23,7 +23,7 @@ class Settings:
         ]
         if missing:
             raise ConfigError("Не заданы переменные окружения: " + ", ".join(missing))
-        api_url = os.environ.get("CRM_API_URL", "http://web:8000/api/v1/bot/")
+        api_url = os.environ.get("CRM_API_URL", "http://nginx:8081/api/v1/bot/")
         return cls(
             bot_token=os.environ["TELEGRAM_BOT_TOKEN"],
             api_url=api_url if api_url.endswith("/") else api_url + "/",

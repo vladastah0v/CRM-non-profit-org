@@ -33,6 +33,12 @@ $C run --rm --no-deps -e DJANGO_COLLECTSTATIC=0 web true
 
 log "переключение"
 $C up -d --remove-orphans
+# Бот — в профиле bot, обычный up его не трогает. Запущенный бот переключается тоже:
+# иначе он остался бы на старом образе и старых адресе API и сети
+if [ -n "$($C --profile bot ps -q bot)" ]; then
+    log "переключение Telegram-бота"
+    $C --profile bot up -d bot
+fi
 
 DOMAIN="$(grep -E '^DOMAIN=' .env | cut -d= -f2-)"
 for _ in $(seq 1 30); do

@@ -53,7 +53,6 @@ services:
     volumes:
       - media:/app/media
       - static:/app/staticfiles
-    networks: [default, bot]
 
   celery:
     <<: *app
@@ -65,7 +64,9 @@ services:
 
   # Telegram-бот волонтёров (п. 7.2): запускается отдельно —
   # docker compose --profile bot up -d bot. Получает только свои переменные (без ключей
-  # шифрования и пароля базы) и сидит в отдельной сети: видит web, но не db и redis.
+  # шифрования и пароля базы) и сидит в отдельной сети bot: видит только Nginx, но не web,
+  # db и redis. Внутренний вход Nginx (порт 8081) пропускает к web лишь /api/v1/bot/ —
+  # взломанный бот не обойдёт лимиты Nginx и не подставит свой X-Real-IP.
   bot:
     build:
       context: .
@@ -75,11 +76,11 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       CRM_API_TOKEN: ${BOT_API_TOKEN:-}
-      CRM_API_URL: http://web:8000/api/v1/bot/
+      CRM_API_URL: http://nginx:8081/api/v1/bot/
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     networks: [bot]
     depends_on:
-      - web
+      - nginx
     restart: unless-stopped
 
   nginx:
@@ -87,6 +88,7 @@ services:
     volumes:
       - static:/app/staticfiles:ro
       - ./docker/nginx/snippets:/etc/nginx/snippets:ro
+    networks: [default, bot]
     depends_on:
       - web
     restart: unless-stopped

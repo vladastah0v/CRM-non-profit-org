@@ -91,6 +91,6 @@ def test_settings_from_env(monkeypatch):
         Settings.from_env()
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "1:abc")
     monkeypatch.setenv("CRM_API_TOKEN", "crm_x")
-    monkeypatch.setenv("CRM_API_URL", "http://web:8000/api/v1/bot")
+    monkeypatch.setenv("CRM_API_URL", "http://nginx:8081/api/v1/bot")
     settings = Settings.from_env()
-    assert settings.api_url == "http://web:8000/api/v1/bot/"
+    assert settings.api_url == "http://nginx:8081/api/v1/bot/"
