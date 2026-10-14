@@ -32,7 +32,10 @@ concurrency:
 jobs:
   deploy:
     name: Выпуск на ${{ github.event.inputs.environment || 'test' }}
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # Автовыпуск — только после push в main: CI запускается и на PR из форков с веткой main
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'test' }}
     steps:
@@ -52,5 +55,10 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           REF: ${{ github.event.inputs.ref || github.event.workflow_run.head_sha || github.sha }}
         run: |
+          # REF попадает в команду на сервере: только имя тега или коммита, без кавычек и опций git
+          if ! printf '%s' "$REF" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._/-]*$'; then
+            echo "Недопустимый тег или коммит: $REF" >&2
+            exit 1
+          fi
           ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes "$USER@$HOST" \
             "cd '$DEPLOY_PATH' && sh scripts/deploy.sh '$REF'"
