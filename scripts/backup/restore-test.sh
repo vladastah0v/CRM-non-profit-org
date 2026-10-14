@@ -6,9 +6,13 @@
 set -eu
 
 ROWS="${ROWS:-1000000}"
+# Одноразовый ключ шифрования копий (64 hex-символа) — только на время теста
+RESTORE_TEST_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+export RESTORE_TEST_KEY
 P="docker compose -p crm-restore-test -f scripts/backup/restore-test.yml"
 log() { echo "$(date '+%H:%M:%S') $*"; }
-sql() { $P exec -T "$1" psql -U postgres -tAc "$2"; }
+# По TCP: временный сервер инициализации образа слушает только сокет — ждём настоящий
+sql() { $P exec -T "$1" psql -h 127.0.0.1 -U postgres -tAc "$2"; }
 wait_ready() {
     for _ in $(seq 1 120); do
         if [ "$(sql "$1" "SELECT pg_is_in_recovery()" 2>/dev/null)" = "f" ]; then return 0; fi

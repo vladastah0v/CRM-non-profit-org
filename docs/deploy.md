@@ -41,7 +41,7 @@
    ```bash
    python3 -c "import secrets; print(secrets.token_urlsafe(50))"   # DJANGO_SECRET_KEY
    python3 -c "import secrets; print(secrets.token_urlsafe(24))"   # POSTGRES_PASSWORD, POSTGRES_APP_PASSWORD
-   python3 -c "import secrets; print(secrets.token_hex(32))"       # BACKUP_ENCRYPTION_KEY, INTAKE_HMAC_SECRET
+   python3 -c "import secrets; print(secrets.token_hex(32))"       # BACKUP_ENCRYPTION_KEY, INTAKE_HMAC_SECRET, REDIS_PASSWORD
    docker compose run --rm --no-deps web python manage.py generate_encryption_key   # FIELD_ENCRYPTION_KEYS
    ```
 
@@ -49,7 +49,9 @@
    `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS=https://<домен>`, нестандартный
    `DJANGO_ADMIN_URL`, `DATABASE_URL` (роль-владелец `crm`) и
    `APP_DATABASE_URL=postgres://crm_app:<POSTGRES_APP_PASSWORD>@db:5432/crm` (роль приложения),
-   `S3_*` (файлы), `BACKUP_*` (копии), `PD_RETENTION_DAYS` (срок хранения, утверждает фонд).
+   `S3_*` (файлы), `BACKUP_*` (копии), `REDIS_PASSWORD` (в Redis — сессии сотрудников;
+   адреса подключения с паролем `docker-compose.prod.yml` собирает сам), `PD_RETENTION_DAYS`
+   (срок хранения, утверждает фонд). Права на файл: `chmod 600 .env` — его читает только владелец.
 6. **Первый сертификат** (до запуска Nginx — порт 80 свободен):
 
    ```bash

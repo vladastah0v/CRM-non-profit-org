@@ -15,8 +15,16 @@ x-walg: &walg
   WALG_LIBSODIUM_KEY_TRANSFORM: hex
   WALG_COMPRESSION_METHOD: brotli
 
+# Журналы контейнеров — с ротацией: без неё Docker хранит их бессрочно, а в них IP-адреса
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   db:
+    logging: *logging
     build: docker/postgres
     image: crm-db:16-walg
     environment:
@@ -37,6 +45,7 @@ services:
       - archive_timeout=300
 
   backup:
+    logging: *logging
     image: crm-db:16-walg
     entrypoint: ["crm-backup", "loop"]
     environment:
@@ -55,7 +64,11 @@ services:
     restart: unless-stopped
 
   web:
+    logging: *logging
     environment:
+      # Redis с паролем: в нём сессии сотрудников (REDIS_PASSWORD — только hex, без символов URL)
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Задайте REDIS_PASSWORD в .env}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
       DJANGO_SETTINGS_MODULE: config.settings.prod
       DJANGO_MIGRATE: "1"
       DJANGO_COLLECTSTATIC: "1"
@@ -64,16 +77,25 @@ services:
       MIGRATE_DATABASE_URL: ${DATABASE_URL}
 
   celery:
+    logging: *logging
     environment:
+      # Redis с паролем: в нём сессии сотрудников (REDIS_PASSWORD — только hex, без символов URL)
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Задайте REDIS_PASSWORD в .env}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
       DJANGO_SETTINGS_MODULE: config.settings.prod
       DATABASE_URL: ${APP_DATABASE_URL}
 
   beat:
+    logging: *logging
     environment:
+      # Redis с паролем: в нём сессии сотрудников (REDIS_PASSWORD — только hex, без символов URL)
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Задайте REDIS_PASSWORD в .env}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
       DJANGO_SETTINGS_MODULE: config.settings.prod
       DATABASE_URL: ${APP_DATABASE_URL}
 
   nginx:
+    logging: *logging
     environment:
       DOMAIN: ${DOMAIN:?Задайте DOMAIN в .env}
       ADMIN_URL: ${DJANGO_ADMIN_URL:-admin/}
@@ -88,12 +110,23 @@ services:
     command: ["/bin/sh", "-c", "while :; do sleep 6h; nginx -s reload; done & exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
 
   certbot:
+    logging: *logging
     image: certbot/certbot:latest
     volumes:
       - certbot-www:/var/www/certbot
       - letsencrypt:/etc/letsencrypt
     entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
     restart: unless-stopped
+
+  # Пароль: до Redis дотягиваются все контейнеры общей сети, в том числе Nginx
+  redis:
+    logging: *logging
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Задайте REDIS_PASSWORD в .env}"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}  # для проверки здоровья (redis-cli ping)
+
+  bot:
+    logging: *logging
 
 volumes:
   certbot-www:

@@ -10,8 +10,9 @@ x-walg: &walg
   AWS_ENDPOINT: http://s3:9090
   AWS_REGION: ru-central1
   AWS_S3_FORCE_PATH_STYLE: "true"
-  # Шифрование копий (НФТ-ИБ-06); на сервере — свой ключ из .env
-  WALG_LIBSODIUM_KEY: ec2a80ccc92ea3267bfb983f7e8899b0c123ee31ba22632fe118c94e496ca0d3
+  # Шифрование копий (НФТ-ИБ-06). Ключ — одноразовый, его создаёт restore-test.sh при
+  # каждом запуске: в репозитории ключей нет. На сервере — свой ключ из .env
+  WALG_LIBSODIUM_KEY: ${RESTORE_TEST_KEY:?Запускайте через scripts/backup/restore-test.sh}
   WALG_LIBSODIUM_KEY_TRANSFORM: hex
   WALG_COMPRESSION_METHOD: brotli
 
@@ -22,6 +23,9 @@ services:
     environment:
       COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: backups
       initialBuckets: backups
+      # Отдача большой копии на медленном стенде дольше стандартного тайм-аута — иначе
+      # S3Mock обрывает ответ («unexpected EOF» у WAL-G)
+      SPRING_MVC_ASYNC_REQUEST_TIMEOUT: 15m
 
   db:
     build: ../../docker/postgres
