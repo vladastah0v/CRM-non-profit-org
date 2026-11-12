@@ -1,2 +1,3 @@
+-c constraints.txt
 # Telegram-бот (отдельный образ, без Django и без доступа к базе — п. 7.2 ТЗ)
 aiogram>=3.31,<4

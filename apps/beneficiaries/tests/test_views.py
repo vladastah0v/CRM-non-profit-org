@@ -301,3 +301,19 @@ def test_pages_markup(make_user, verified_client, make_beneficiary, curator):
     coordinator = verified_client(make_user("coordinator"))
     for page in (LIST, url("detail", b)):
         check_markup(coordinator.get(page).content.decode())
+
+
+def test_recent_events_keeps_newest_and_stable_ties():
+    from apps.beneficiaries.selectors import TIMELINE_LIMIT, RecentEvents, TimelineEvent
+
+    recent = RecentEvents()
+    now = timezone.now()
+    for i in range(2 * TIMELINE_LIMIT):
+        recent.append(TimelineEvent(now + timedelta(seconds=i), str(i)))
+    assert [event.title for event in recent.result()] == [
+        str(i) for i in reversed(range(TIMELINE_LIMIT, 2 * TIMELINE_LIMIT))
+    ]
+    tied = RecentEvents()
+    for i in range(2 * TIMELINE_LIMIT):
+        tied.append(TimelineEvent(now, str(i)))
+    assert [event.title for event in tied.result()] == [str(i) for i in range(TIMELINE_LIMIT)]

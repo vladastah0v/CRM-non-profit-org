@@ -226,6 +226,8 @@ def update_shift(
     request: HttpRequest | None = None,
 ) -> Shift:
     """Изменение смены. Новое время — волонтёрам сообщение и новые напоминания."""
+    Shift.objects.select_for_update().get(pk=shift.pk)
+    shift.refresh_from_db()
     _ensure_shift_editable(shift)
     clean = _clean_shift({**{key: getattr(shift, key) for key in SHIFT_FIELDS}, **data})
     changed = [key for key, value in clean.items() if getattr(shift, key) != value]
@@ -238,6 +240,17 @@ def update_shift(
             changed.append("skills")
     if not changed:
         return shift
+    if {"starts_at", "ends_at"} & set(changed):
+        assignments = list(
+            shift.assignments.filter(status__in=OCCUPYING_STATUSES, is_archived=False)
+            .select_related("volunteer")
+            .order_by("volunteer_id")
+        )
+        for assignment in assignments:
+            Volunteer.objects.select_for_update().get(pk=assignment.volunteer_id)
+            _check_overlap(
+                assignment.volunteer, shift.starts_at, shift.ends_at, exclude=[assignment.pk]
+            )
     shift.save()
     log_event(AuditAction.UPDATE, request=request, obj=shift, fields=changed)
     if {"starts_at", "ends_at"} & set(changed):
@@ -319,6 +332,7 @@ def assign_to_shift(
     # Блокировка смены: двое не займут последнее место одновременно
     locked = Shift.objects.select_for_update().get(pk=shift.pk)
     _ensure_shift_editable(locked)
+    volunteer = Volunteer.objects.select_for_update().get(pk=volunteer.pk)
     _check_volunteer(volunteer)
     if via_bot:
         if not locked.allow_signup:
@@ -398,6 +412,7 @@ def create_visits(
 ) -> list[Assignment]:
     """Визит или серия еженедельных визитов (регулярные визиты, ФТ-С-05)."""
     _check_visit_beneficiary(beneficiary)
+    volunteer = Volunteer.objects.select_for_update().get(pk=volunteer.pk)
     _check_volunteer(volunteer)
     _check_visit_time(starts_at, ends_at)
     if not 0 <= repeat_weeks <= MAX_REPEAT_WEEKS:
@@ -441,6 +456,9 @@ def update_visit(
     program: Any = None,
     request: HttpRequest | None = None,
 ) -> Assignment:
+    Volunteer.objects.select_for_update().get(pk=visit.volunteer_id)
+    Assignment.objects.select_for_update().get(pk=visit.pk)
+    visit.refresh_from_db()
     if not visit.is_visit or visit.is_archived or not visit.is_pending:
         raise ValidationError("Изменить можно только предстоящий визит.")
     if visit.has_started:

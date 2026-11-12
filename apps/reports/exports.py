@@ -66,9 +66,9 @@ def _hours_subquery(model: Any, **filters: Any) -> Coalesce:
     return Coalesce(Subquery(total, output_field=HOURS), Value(Decimal(0)), output_field=HOURS)
 
 
-def _limit(queryset: QuerySet) -> tuple[list[Any], int]:
+def _limit(queryset: QuerySet) -> tuple[Iterable[Any], int]:
     count = queryset.count()
-    return list(queryset[:MAX_ROWS]), count
+    return queryset[:MAX_ROWS].iterator(chunk_size=200), count
 
 
 # ---------------------------------------------------------------------------

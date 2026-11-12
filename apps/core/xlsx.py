@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import datetime
-import io
+import tempfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -18,6 +18,7 @@ from urllib.parse import quote
 from django.http import HttpResponse
 from django.utils import timezone
 from openpyxl import Workbook
+from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
@@ -50,42 +51,48 @@ def cell_value(value: Any) -> Any:
 
 
 def build_workbook(sheets: Sequence[Sheet]) -> bytes:
-    workbook = Workbook()
-    workbook.remove(workbook.active)
+    workbook = Workbook(write_only=True)
     for sheet in sheets:
         ws = workbook.create_sheet(sheet.title.translate(_SHEET_FORBIDDEN)[:31] or "Лист")
-        for line in sheet.caption:
-            ws.append([line])
-            ws.cell(row=ws.max_row, column=1).font = Font(bold=ws.max_row == 1)
+        header_row = len(sheet.caption) + (1 if sheet.caption else 0) + 1
+        ws.freeze_panes = f"A{header_row + 1}"
+        for col, label in enumerate(sheet.header, start=1):
+            ws.column_dimensions[get_column_letter(col)].width = min(
+                max(len(str(label)) + 2, 24), MAX_COLUMN_WIDTH
+            )
+        for index, line in enumerate(sheet.caption):
+            cell = WriteOnlyCell(ws, value=str(line))
+            cell.data_type = "s"
+            cell.font = Font(bold=index == 0)
+            ws.append([cell])
         if sheet.caption:
             ws.append([])
-        ws.append(list(sheet.header))
-        header_row = ws.max_row
-        for col in range(1, len(sheet.header) + 1):
-            cell = ws.cell(row=header_row, column=col)
+        header = []
+        for label in sheet.header:
+            cell = WriteOnlyCell(ws, value=str(label))
+            cell.data_type = "s"
             cell.font = Font(bold=True)
             cell.alignment = Alignment(wrap_text=True, vertical="top")
-        widths = [len(str(h)) for h in sheet.header]
+            header.append(cell)
+        ws.append(header)
         for row in sheet.rows:
-            values = [cell_value(v) for v in row]
-            ws.append(values)
-            for col, value in enumerate(values, start=1):
-                cell = ws.cell(row=ws.max_row, column=col)
-                if isinstance(value, str) and value.startswith("="):
-                    cell.value = value
-                    cell.data_type = "s"  # текст, не формула
+            cells = []
+            for raw in row:
+                value = cell_value(raw)
+                cell = WriteOnlyCell(ws, value=value)
+                if isinstance(value, str):
+                    cell.data_type = "s"
                 elif isinstance(value, datetime.datetime):
                     cell.number_format = "DD.MM.YYYY HH:MM"
                 elif isinstance(value, datetime.date):
                     cell.number_format = "DD.MM.YYYY"
-                if col <= len(widths):
-                    widths[col - 1] = max(widths[col - 1], min(len(str(value)), MAX_COLUMN_WIDTH))
-        for col, width in enumerate(widths, start=1):
-            ws.column_dimensions[get_column_letter(col)].width = min(width + 2, MAX_COLUMN_WIDTH)
-        ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
-    buffer = io.BytesIO()
-    workbook.save(buffer)
-    return buffer.getvalue()
+                cells.append(cell)
+            ws.append(cells)
+    # Ячейки записываются на диск по мере обхода строк; в памяти остаётся готовый XLSX.
+    with tempfile.TemporaryFile() as buffer:
+        workbook.save(buffer)
+        buffer.seek(0)
+        return buffer.read()
 
 
 def xlsx_response(content: bytes, filename: str) -> HttpResponse:

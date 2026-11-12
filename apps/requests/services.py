@@ -351,7 +351,14 @@ def archive_assistance(assistance: Assistance, *, request: HttpRequest | None = 
     убрать нельзя: заявка осталась бы «выполненной» без помощи (п. 4.3)."""
     if assistance.is_archived:
         return
-    help_request = assistance.request
+    help_request = (
+        HelpRequest.objects.select_for_update().get(pk=assistance.request_id)
+        if assistance.request_id is not None
+        else None
+    )
+    assistance.refresh_from_db()
+    if assistance.is_archived:
+        return
     if (
         help_request is not None
         and help_request.status == S.DONE

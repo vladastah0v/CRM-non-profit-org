@@ -349,3 +349,15 @@ def test_removed_volunteer_gets_message(
     ):
         services.change_assignment_status(assignment, S.CANCELLED, comment="Заболел")
     delay.assert_called_once_with(str(assignment.pk), "cancelled", 1)
+
+
+def test_moving_shift_cannot_overlap_other_assignment(make_active, make_shift):
+    volunteer = make_active()
+    first = make_shift(starts_in=DAY)
+    second = make_shift(starts_in=3 * DAY)
+    services.assign_to_shift(first, volunteer)
+    services.assign_to_shift(second, volunteer)
+    with pytest.raises(ValidationError, match="уже есть назначение"):
+        services.update_shift(second, {"starts_at": first.starts_at, "ends_at": first.ends_at})
+    second.refresh_from_db()
+    assert second.starts_at > first.ends_at

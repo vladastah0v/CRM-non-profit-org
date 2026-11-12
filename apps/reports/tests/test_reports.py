@@ -285,3 +285,20 @@ def test_old_shift_days_not_in_period(make_user, make_shift, make_active):
     shift_services.change_assignment_status(assignment, AssignmentStatus.ATTENDED)
     report = services.volunteer_report(make_user("admin"), this_month())
     assert report.shift_hours == 0 and report.shifts_held == 0
+
+
+def test_xlsx_streams_rows_and_preserves_metadata():
+    def rows():
+        for i in range(2000):
+            yield (f"=value{i}", TODAY())
+
+    content = build_workbook([Sheet("Данные", ["Имя", "Дата"], rows(), caption=["=caption"])])
+    workbook = load_workbook(io.BytesIO(content))
+    sheet = workbook.active
+    assert sheet.max_row == 2003
+    assert sheet.freeze_panes == "A4"
+    assert sheet["A1"].data_type == "s"
+    assert sheet["A3"].font.bold
+    assert sheet["A2003"].value == "=value1999"
+    assert sheet["A2003"].data_type == "s"
+    assert sheet["B2003"].number_format == "DD.MM.YYYY"

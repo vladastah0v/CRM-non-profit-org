@@ -106,12 +106,15 @@ def test_ft_v_04_duplicate_flagged_but_not_revealed(api, make_user):
     [
         {"signature": "sha256=" + "0" * 64},  # неверная подпись
         {"secret": "wrong-secret"},  # подписано другим ключом
-        {"timestamp": int(time.time()) - 600},  # устарела
-        {"timestamp": int(time.time()) + 600},  # из будущего
+        {"timestamp_offset": -600},  # устарела
+        {"timestamp_offset": 600},  # из будущего
         {"signature": "md5=abc"},
     ],
 )
 def test_signature_required(api, headers):
+    headers = dict(headers)
+    if "timestamp_offset" in headers:
+        headers["timestamp"] = int(time.time()) + headers.pop("timestamp_offset")
     assert post(api, payload(), **headers).status_code == 403
     assert not Volunteer.objects.exists()
 

@@ -171,3 +171,29 @@ def test_telegram_not_configured(settings):
     with mock.patch("urllib.request.urlopen") as urlopen:
         assert telegram.send_message(42, "Текст") is SendResult.FAILED
     urlopen.assert_not_called()
+
+
+@pytest.mark.parametrize("result", [SendResult.SENT, SendResult.UNREACHABLE, None])
+def test_event_task_does_not_retry_terminal_results(result):
+    from apps.shifts.tasks import notify_volunteer
+
+    with (
+        mock.patch.object(reminders, "send_event", return_value=result),
+        mock.patch.object(notify_volunteer, "retry") as retry,
+    ):
+        notify_volunteer.run("assignment", "assigned")
+    retry.assert_not_called()
+
+
+def test_event_task_retries_temporary_failure():
+    from celery.exceptions import Retry
+
+    from apps.shifts.tasks import notify_volunteer
+
+    with (
+        mock.patch.object(reminders, "send_event", return_value=SendResult.FAILED),
+        mock.patch.object(notify_volunteer, "retry", side_effect=Retry()) as retry,
+        pytest.raises(Retry),
+    ):
+        notify_volunteer.run("assignment", "assigned")
+    retry.assert_called_once_with(countdown=30)

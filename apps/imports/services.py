@@ -93,9 +93,15 @@ def _fail(job: ImportJob, message: str) -> None:
     _finish_message(job, "Импорт: файл не удалось прочитать")
 
 
+@transaction.atomic
 def check(job_id: Any) -> None:
     """Предпросмотр: сколько будет создано и обновлено, ошибки построчно, дубли."""
-    job = ImportJob.objects.select_related("created_by", "file").filter(pk=job_id).first()
+    job = (
+        ImportJob.objects.select_for_update(of=("self",))
+        .select_related("created_by", "file")
+        .filter(pk=job_id)
+        .first()
+    )
     if job is None or job.status != ImportStatus.CHECKING:
         return
     user: User | None = job.created_by
@@ -135,22 +141,29 @@ def confirm(job: ImportJob, *, request: HttpRequest | None = None) -> None:
     job.status = locked.status
 
 
+@transaction.atomic
 def execute(job_id: Any) -> None:
     """Импорт: строки без ошибок сохраняются, ошибочные — в отчёт построчно."""
-    job = ImportJob.objects.select_related("created_by", "file").filter(pk=job_id).first()
+    job = (
+        ImportJob.objects.select_for_update(of=("self",))
+        .select_related("created_by", "file")
+        .filter(pk=job_id)
+        .first()
+    )
     if job is None or job.status != ImportStatus.IMPORTING:
         return
     user: User | None = job.created_by
     with acting_as(user):
         try:
             table = _table(job)
-            result = importers.run(importers.IMPORTERS[job.kind](user), table)  # type: ignore[arg-type]
+            with transaction.atomic():
+                result = importers.run(importers.IMPORTERS[job.kind](user), table)  # type: ignore[arg-type]
         except ValidationError as exc:
             _fail(job, " ".join(exc.messages))
             return
         except Exception:
             logger.exception("Импорт %s: сбой", job.pk)
-            _fail(job, "Импорт прерван из-за ошибки. Уже сохранённые строки остались в базе.")
+            _fail(job, "Импорт прерван из-за ошибки. Изменения этого импорта отменены.")
             return
         job.status = ImportStatus.DONE
         job.result = result.summary

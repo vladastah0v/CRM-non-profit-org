@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import heapq
 from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import Any
@@ -142,16 +143,38 @@ def _start_of(day: datetime.date) -> datetime.datetime:
     return timezone.make_aware(datetime.datetime.combine(day, datetime.time.min))
 
 
+class RecentEvents:
+    """Сохраняет только последние события, не накапливая всю историю карточки."""
+
+    def __init__(self) -> None:
+        self.items: list[tuple[datetime.datetime, int, TimelineEvent]] = []
+        self.sequence = 0
+
+    def append(self, event: TimelineEvent) -> None:
+        # При равном времени сохраняем прежний порядок источников событий.
+        item = (event.at, -self.sequence, event)
+        self.sequence += 1
+        if len(self.items) < TIMELINE_LIMIT:
+            heapq.heappush(self.items, item)
+        else:
+            heapq.heappushpop(self.items, item)
+
+    def result(self) -> list[TimelineEvent]:
+        return [item[2] for item in sorted(self.items, reverse=True)]
+
+
 def timeline(beneficiary: Beneficiary) -> list[TimelineEvent]:
     """Все события случая в хронологическом порядке (новые сверху).
 
     Без значений полей — только что изменилось: значения есть в самой карточке.
     Заявки, помощь и взаимодействия добавятся с модулями этапа 6.
     """
-    events: list[TimelineEvent] = []
+    events = RecentEvents()
 
-    for change in CaseStatusChange.objects.filter(beneficiary=beneficiary).select_related(
-        "reason", "created_by"
+    for change in (
+        CaseStatusChange.objects.filter(beneficiary=beneficiary)
+        .select_related("reason", "created_by")
+        .iterator(chunk_size=200)
     ):
         title = (
             f"Статус: {change.get_from_status_display()} → {change.get_to_status_display()}"
@@ -172,7 +195,11 @@ def timeline(beneficiary: Beneficiary) -> list[TimelineEvent]:
         "created_at",
         "created_by",
     }
-    records = list(beneficiary.history.select_related("history_user").order_by("history_date"))
+    records = (
+        beneficiary.history.select_related("history_user")
+        .order_by("history_date")
+        .iterator(chunk_size=200)
+    )
     for previous, record in pairwise(records):
         delta = record.diff_against(previous)
         fields = [c.field for c in delta.changes if c.field not in skip]
@@ -184,18 +211,24 @@ def timeline(beneficiary: Beneficiary) -> list[TimelineEvent]:
 
     sensitive = BeneficiarySensitive.objects.filter(beneficiary=beneficiary).first()
     if sensitive is not None:
-        records = list(sensitive.history.select_related("history_user").order_by("history_date"))
-        for index, record in enumerate(records):
-            if index == 0:
+        records = (
+            sensitive.history.select_related("history_user")
+            .order_by("history_date")
+            .iterator(chunk_size=200)
+        )
+        previous = None
+        for record in records:
+            if previous is None:
                 fields = [
                     f for f in ("health", "disability", "passport", "snils") if getattr(record, f)
                 ]
             else:
                 fields = [
                     c.field
-                    for c in record.diff_against(records[index - 1]).changes
+                    for c in record.diff_against(previous).changes
                     if c.field in ("health", "disability", "passport", "snils")
                 ]
+            previous = record
             if fields:
                 labels = ", ".join(_field_label(BeneficiarySensitive, f) for f in fields)
                 events.append(
@@ -207,7 +240,11 @@ def timeline(beneficiary: Beneficiary) -> list[TimelineEvent]:
                     )
                 )
 
-    for consent in Consent.objects.filter(beneficiary=beneficiary).select_related("created_by"):
+    for consent in (
+        Consent.objects.filter(beneficiary=beneficiary)
+        .select_related("created_by")
+        .iterator(chunk_size=200)
+    ):
         events.append(
             TimelineEvent(
                 consent.created_at, "Добавлено согласие", str(consent), consent.created_by
@@ -218,8 +255,10 @@ def timeline(beneficiary: Beneficiary) -> list[TimelineEvent]:
                 TimelineEvent(_start_of(consent.revoked_on), "Отозвано согласие", str(consent))
             )
 
-    for person in RelatedPerson.objects.filter(beneficiary=beneficiary).select_related(
-        "created_by"
+    for person in (
+        RelatedPerson.objects.filter(beneficiary=beneficiary)
+        .select_related("created_by")
+        .iterator(chunk_size=200)
     ):
         events.append(
             TimelineEvent(
@@ -227,8 +266,10 @@ def timeline(beneficiary: Beneficiary) -> list[TimelineEvent]:
             )
         )
 
-    for document in BeneficiaryDocument.objects.filter(beneficiary=beneficiary).select_related(
-        "created_by"
+    for document in (
+        BeneficiaryDocument.objects.filter(beneficiary=beneficiary)
+        .select_related("created_by")
+        .iterator(chunk_size=200)
     ):
         events.append(
             TimelineEvent(
@@ -236,8 +277,10 @@ def timeline(beneficiary: Beneficiary) -> list[TimelineEvent]:
             )
         )
 
-    for access in CuratorAccess.objects.filter(beneficiary=beneficiary).select_related(
-        "user", "created_by"
+    for access in (
+        CuratorAccess.objects.filter(beneficiary=beneficiary)
+        .select_related("user", "created_by")
+        .iterator(chunk_size=200)
     ):
         events.append(
             TimelineEvent(
@@ -254,18 +297,18 @@ def timeline(beneficiary: Beneficiary) -> list[TimelineEvent]:
                 )
             )
 
-    events += _help_events(beneficiary)
-    events.sort(key=lambda event: event.at, reverse=True)
-    return events[:TIMELINE_LIMIT]
+    for event in _help_events(beneficiary):
+        events.append(event)
+    return events.result()
 
 
 def _help_events(beneficiary: Beneficiary) -> list[TimelineEvent]:
     """Заявки, помощь, взаимодействия, задачи (этап 6) и визиты волонтёров (этап 7)."""
-    events: list[TimelineEvent] = []
+    events = RecentEvents()
     changes = RequestStatusChange.objects.filter(request__beneficiary=beneficiary).select_related(
         "request__assistance_type", "created_by"
     )
-    for change in changes:
+    for change in changes.iterator(chunk_size=200):
         name = str(change.request.assistance_type)
         title = (
             f"Заявка: {change.get_from_status_display()} → {change.get_to_status_display()}"
@@ -275,9 +318,11 @@ def _help_events(beneficiary: Beneficiary) -> list[TimelineEvent]:
         details = "; ".join(p for p in (name, change.comment) if p)
         events.append(TimelineEvent(change.created_at, title, details, change.created_by))
 
-    for assistance in Assistance.objects.filter(
-        beneficiary=beneficiary, is_archived=False
-    ).select_related("assistance_type", "created_by"):
+    for assistance in (
+        Assistance.objects.filter(beneficiary=beneficiary, is_archived=False)
+        .select_related("assistance_type", "created_by")
+        .iterator(chunk_size=200)
+    ):
         events.append(
             TimelineEvent(
                 assistance.created_at,
@@ -287,9 +332,11 @@ def _help_events(beneficiary: Beneficiary) -> list[TimelineEvent]:
             )
         )
 
-    for interaction in Interaction.objects.filter(
-        beneficiary=beneficiary, is_archived=False
-    ).select_related("created_by"):
+    for interaction in (
+        Interaction.objects.filter(beneficiary=beneficiary, is_archived=False)
+        .select_related("created_by")
+        .iterator(chunk_size=200)
+    ):
         events.append(
             TimelineEvent(
                 interaction.happened_at,
@@ -299,8 +346,10 @@ def _help_events(beneficiary: Beneficiary) -> list[TimelineEvent]:
             )
         )
 
-    for task in Task.objects.filter(beneficiary=beneficiary, is_archived=False).select_related(
-        "created_by", "assignee"
+    for task in (
+        Task.objects.filter(beneficiary=beneficiary, is_archived=False)
+        .select_related("created_by", "assignee")
+        .iterator(chunk_size=200)
     ):
         events.append(
             TimelineEvent(
@@ -318,7 +367,7 @@ def _help_events(beneficiary: Beneficiary) -> list[TimelineEvent]:
     visit_changes = AssignmentStatusChange.objects.filter(
         assignment__beneficiary=beneficiary, assignment__is_archived=False
     ).select_related("assignment__volunteer", "created_by")
-    for visit_change in visit_changes:
+    for visit_change in visit_changes.iterator(chunk_size=200):
         visit = visit_change.assignment
         title = (
             f"Визит волонтёра: {visit_change.get_to_status_display().lower()}"
@@ -333,4 +382,4 @@ def _help_events(beneficiary: Beneficiary) -> list[TimelineEvent]:
         events.append(
             TimelineEvent(visit_change.created_at, title, "; ".join(p for p in parts if p), author)
         )
-    return events
+    return events.result()

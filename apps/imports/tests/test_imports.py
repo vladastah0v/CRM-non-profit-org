@@ -214,3 +214,78 @@ def test_job_page_polls_only_while_in_progress(admin_client, admin):
     ImportJob.objects.filter(pk=job.pk).update(status=ImportStatus.DONE, finished_at=timezone.now())
     fragment = admin_client.get(job.get_absolute_url(), HTTP_HX_REQUEST="true")
     assert "every 3s" not in fragment.content.decode()
+
+
+def test_import_unexpected_failure_rolls_back_all_rows(admin, make_volunteer):
+    from unittest.mock import patch
+
+    job = services.start("volunteers", csv_file("Фамилия;Имя\nТест;Тест"))
+    ImportJob.objects.filter(pk=job.pk).update(status=ImportStatus.IMPORTING)
+    before = Volunteer.objects.count()
+
+    def fail(*args):
+        make_volunteer(phone="+79167770001")
+        raise RuntimeError("worker failure")
+
+    with patch.object(importers, "run", side_effect=fail):
+        services.execute(job.pk)
+    job.refresh_from_db()
+    assert job.status == ImportStatus.FAILED
+    assert Volunteer.objects.count() == before
+    assert job.file is None
+
+
+def test_completed_import_is_not_executed_twice(admin):
+    from unittest.mock import patch
+
+    job = ImportJob.objects.create(kind="volunteers", status=ImportStatus.DONE)
+    with patch.object(importers, "run") as run:
+        services.execute(job.pk)
+    run.assert_not_called()
+
+
+def test_recovery_requeues_old_pending_jobs_only(django_capture_on_commit_callbacks):
+    from unittest.mock import patch
+
+    from apps.imports.tasks import check_file, import_file, recover_pending
+
+    old = timezone.now() - datetime.timedelta(minutes=20)
+    checking = ImportJob.objects.create(kind="volunteers", status=ImportStatus.CHECKING)
+    importing = ImportJob.objects.create(kind="volunteers", status=ImportStatus.IMPORTING)
+    done = ImportJob.objects.create(kind="volunteers", status=ImportStatus.DONE)
+    ImportJob.objects.filter(pk__in=[checking.pk, importing.pk, done.pk]).update(created_at=old)
+    ImportJob.objects.create(kind="volunteers", status=ImportStatus.CHECKING)
+    with (
+        patch.object(check_file, "delay") as check,
+        patch.object(import_file, "delay") as execute,
+        django_capture_on_commit_callbacks(execute=True),
+    ):
+        assert recover_pending() == 2
+    check.assert_called_once_with(str(checking.pk))
+    execute.assert_called_once_with(str(importing.pk))
+
+
+def test_interrupted_import_can_be_retried_without_partial_changes(make_volunteer):
+    from unittest.mock import patch
+
+    class WorkerStopped(BaseException):
+        pass
+
+    job = services.start("volunteers", csv_file("Фамилия;Имя\nТест;Тест"))
+    ImportJob.objects.filter(pk=job.pk).update(status=ImportStatus.IMPORTING)
+    before = Volunteer.objects.count()
+
+    def interrupt(*args):
+        make_volunteer(phone="+79167770002")
+        raise WorkerStopped
+
+    with patch.object(importers, "run", side_effect=interrupt), pytest.raises(WorkerStopped):
+        services.execute(job.pk)
+    job.refresh_from_db()
+    assert job.status == ImportStatus.IMPORTING and job.file is not None
+    assert Volunteer.objects.count() == before
+    result = importers.RunResult({"rows": 0}, [], [])
+    with patch.object(importers, "run", return_value=result):
+        services.execute(job.pk)
+    job.refresh_from_db()
+    assert job.status == ImportStatus.DONE and job.file is None
